@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reversi vs AI</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  #board-wrap { position: relative; display: inline-block; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 58px);
+    grid-template-rows: repeat(8, 58px);
+    border: 3px solid #1a3a15;
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+  }
+  .cell {
+    width: 58px; height: 58px;
+    background: #2d6a27;
+    border: 1px solid #1a4a15;
+    display: flex; align-items: center; justify-content: center;
+    cursor: default; position: relative; user-select: none;
+  }
+  .cell.legal { cursor: pointer; }
+  .cell.legal::after {
+    content: '';
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    position: absolute;
+  }
+  .piece {
+    width: 50px; height: 50px; border-radius: 50%;
+    position: absolute; z-index: 1; pointer-events: none;
+  }
+  .piece.x {
+    background: radial-gradient(circle at 38% 32%, #888, #111 68%);
+    box-shadow: 1px 3px 6px rgba(0,0,0,0.7);
+  }
+  .piece.o {
+    background: radial-gradient(circle at 38% 32%, #fff, #bbb 68%);
+    box-shadow: 1px 3px 5px rgba(0,0,0,0.4);
+    border: 1px solid #aaa;
+  }
+  #arrow-overlay {
+    position: absolute; top: 3px; left: 3px;
+    width: 464px; height: 464px; pointer-events: none; z-index: 3;
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">← Games</a>
+  <h1>⬤ Reversi</h1>
+</div>
+<div class="main">
+  <div id="board-wrap">
+    <div id="board"></div>
+    <svg id="arrow-overlay" viewBox="0 0 464 464"></svg>
+  </div>
+  <div id="sidebar" class="sidebar"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+const PASS = -1;
+
+function flipsFor(board, pos, player) {
+  const opp = player==='X'?'O':'X';
+  const r=Math.floor(pos/8), c=pos%8;
+  const result=[];
+  for (const [dr,dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]) {
+    const line=[];
+    let nr=r+dr, nc=c+dc;
+    while (nr>=0&&nr<8&&nc>=0&&nc<8) {
+      const cell=board[nr*8+nc];
+      if (cell===opp) line.push(nr*8+nc);
+      else if (cell===player) { result.push(...line); break; }
+      else break;
+      nr+=dr; nc+=dc;
+    }
+  }
+  return result;
+}
+
+function legalMovesFor(board, player) {
+  const moves=[];
+  for (let i=0;i<64;i++) {
+    if (!board[i] && flipsFor(board,i,player).length>0) moves.push(i);
+  }
+  return moves;
+}
+
+function doFlip(board, pos, player) {
+  const b=[...board];
+  b[pos]=player;
+  for (const f of flipsFor(b,pos,player)) b[f]=player;
+  return b;
+}
+
+function initBoard() {
+  const b=Array(64).fill(null);
+  b[27]='O'; b[28]='X'; b[35]='X'; b[36]='O';
+  return b;
+}
+
+function countPieces(board) {
+  let x=0,o=0;
+  for (const c of board) { if(c==='X')x++; else if(c==='O')o++; }
+  return {x,o};
+}
+
+// ─── Heuristics ───────────────────────────────────────────────────────────────
+
+function parsePW(id, def) {
+  const v=parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? def : v;
+}
+
+function getHeuristicWeights() {
+  return {
+    material: parsePW('hw-material', 0),
+    line:     parsePW('hw-line', 0),
+    center:   parsePW('hw-center', 0),
+    corner:   parsePW('hw-corner', 0),
+    sides:    parsePW('hw-sides', 0),
+    mobility: parsePW('hw-mobility', 0),
+  };
+}
+
+function hLineCompletion(board, player) {
+  let score=0;
+  const scan=(squares)=>{ let run=0; for(const s of squares){if(board[s]===player)run++;else{score+=run*run;run=0;}} score+=run*run; };
+  for (let r=0;r<8;r++) scan([0,1,2,3,4,5,6,7].map(f=>r*8+f));
+  for (let f=0;f<8;f++) scan([0,1,2,3,4,5,6,7].map(r=>r*8+f));
+  for (let d=-7;d<=7;d++) { const l=[]; for(let r=0;r<8;r++){const f=r-d;if(f>=0&&f<8)l.push(r*8+f);} scan(l); }
+  for (let d=0;d<=14;d++) { const l=[]; for(let r=0;r<8;r++){const f=d-r;if(f>=0&&f<8)l.push(r*8+f);} scan(l); }
+  return score;
+}
+
+function hCenterProximity(board, player) {
+  let score=0;
+  for (let i=0;i<64;i++) { if(board[i]!==player)continue; const r=Math.floor(i/8),c=i%8; score+=(7-Math.abs(r-3.5)-Math.abs(c-3.5))/7; }
+  return score;
+}
+
+function hCornerProximity(board, player) {
+  const corners=[[0,0],[0,7],[7,0],[7,7]];
+  const maxD=6; // max achievable min-distance-to-nearest-corner on an 8x8 board (at the center)
+  let score=0;
+  for (let i=0;i<64;i++) { if(board[i]!==player)continue; const r=Math.floor(i/8),c=i%8; const d=Math.min(...corners.map(([cr,cc])=>Math.abs(r-cr)+Math.abs(c-cc))); score+=(maxD-d)/maxD; }
+  return score;
+}
+
+function hSidesProximity(board, player) {
+  let score=0;
+  for (let i=0;i<64;i++) { if(board[i]!==player)continue; const r=Math.floor(i/8),c=i%8; const d=Math.min(r,7-r,c,7-c); score+=(3.5-d)/3.5; }
+  return score;
+}
+
+function hMobility(board) {
+  return legalMovesFor(board,'X').length - legalMovesFor(board,'O').length;
+}
+
+function evaluateBoard(board) {
+  const {x,o}=countPieces(board);
+  const hw=getHeuristicWeights();
+  let score=hw.material*(x-o);
+  if (hw.line)     score+=hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O'));
+  if (hw.center)   score+=hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O'));
+  if (hw.corner)   score+=hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O'));
+  if (hw.sides)    score+=hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O'));
+  if (hw.mobility) score+=hw.mobility*hMobility(board);
+  return score;
+}
+
+// ─── Game Object ─────────────────────────────────────────────────────────────
+
+const reversiGame = {
+  moves(s) {
+    const legal=legalMovesFor(s.board,s.turn);
+    if (legal.length) return legal;
+    const oppLegal=legalMovesFor(s.board,s.turn==='X'?'O':'X');
+    return oppLegal.length ? [PASS] : [];
+  },
+  apply(s, m) {
+    if (m===PASS) return {board:s.board, turn:s.turn==='X'?'O':'X'};
+    return {board:doFlip(s.board,m,s.turn), turn:s.turn==='X'?'O':'X'};
+  },
+  evaluate(s, moves) {
+    if (moves && moves.length === 0) {
+      const {x,o} = countPieces(s.board);
+      return x > o ? 1000 : x < o ? -1000 : 0;
+    }
+    return evaluateBoard(s.board);
+  },
+  isMaximizing(s) { return s.turn==='X'; },
+  isTerminal(s) { return reversiGame.moves(s).length===0; },
+  simulate(s) {
+    let cur=s;
+    for (let i=0;i<120;i++) {
+      if (reversiGame.isTerminal(cur)) break;
+      const mvs=reversiGame.moves(cur);
+      cur=reversiGame.apply(cur, mvs[Math.floor(Math.random()*mvs.length)]);
+    }
+    const {x,o}=countPieces(cur.board);
+    return o>x?1:x>o?0:0.5;
+  },
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+const state = {board:initBoard(), turn:'X', gameOver:false, aiArrowData:null};
+
+function getState() { return {board:state.board, turn:state.turn}; }
+
+function newGame() {
+  state.board=initBoard(); state.turn='X';
+  state.gameOver=false; state.aiArrowData=null;
+  document.getElementById('thinking').textContent='';
+  render();
+  updateScorePanel();
+  triggerNextPlayer();
+}
+
+// ─── Rendering ───────────────────────────────────────────────────────────────
+
+function render() {
+  const boardEl=document.getElementById('board');
+  boardEl.innerHTML='';
+  const humanTurn = !state.gameOver && getPlayerType(state.turn) === 'human';
+  const legal = humanTurn ? legalMovesFor(state.board, state.turn) : [];
+  for (let i=0;i<64;i++) {
+    const cell=document.createElement('div');
+    cell.className='cell'+(legal.includes(i)?' legal':'');
+    if (state.board[i]) {
+      const piece=document.createElement('div');
+      piece.className='piece '+(state.board[i]==='X'?'x':'o');
+      cell.appendChild(piece);
+    }
+    cell.addEventListener('click',()=>handleClick(i));
+    boardEl.appendChild(cell);
+  }
+  renderArrows();
+}
+
+function renderArrows() {
+  const svg=document.getElementById('arrow-overlay');
+  svg.innerHTML='';
+  if (!state.aiArrowData || !showAIHints()) return;
+  for (const {move,value,width} of state.aiArrowData) {
+    if (move===PASS) continue;
+    const col=move%8, row=Math.floor(move/8);
+    const x=col*58+29, y=row*58+29;
+    const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',x); circle.setAttribute('cy',y);
+    circle.setAttribute('r',Math.max(10,width*1.8));
+    circle.setAttribute('fill',valueToColor(value));
+    circle.setAttribute('opacity','0.65');
+    svg.appendChild(circle);
+  }
+}
+
+function updateScorePanel() {
+  const panel=document.getElementById('score-panel');
+  if (!isMinimaxActive()) { panel.style.display='none'; return; }
+  panel.style.display='block';
+  const board=state.board, hw=getHeuristicWeights();
+  const {x,o}=countPieces(board);
+  const sections=[];
+
+  for (const [player, sign, name] of [['X', 1, 'Black'], ['O', -1, 'White']]) {
+    if (getPlayerType(player) !== 'minimax') continue;
+    const fmt=v=>(sign*v).toFixed(2);
+    const lines=[];
+    if (hw.material) { const v=hw.material*(x-o); lines.push(`Material (×${hw.material}): ${fmt(v)} (Black:${x} White:${o})`); }
+    if (hw.line)     { const v=hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O')); lines.push(`Line Completion (×${hw.line}): ${fmt(v)}`); }
+    if (hw.center)   { const v=hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O')); lines.push(`Center Proximity (×${hw.center}): ${fmt(v)}`); }
+    if (hw.corner)   { const v=hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O')); lines.push(`Corner Proximity (×${hw.corner}): ${fmt(v)}`); }
+    if (hw.sides)    { const v=hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O')); lines.push(`Sides Proximity (×${hw.sides}): ${fmt(v)}`); }
+    if (hw.mobility) { const v=hw.mobility*hMobility(board); lines.push(`Mobility (×${hw.mobility}): ${fmt(v)}`); }
+    if (!lines.length) lines.push('No heuristics active');
+    else {
+      const total=lines.reduce((acc,l)=>{ const m=l.match(/: ([-\d.]+)/); return acc+(m?parseFloat(m[1]):0); },0);
+      lines.push('─────────────',`Total: ${total.toFixed(2)}`);
+    }
+    lines.push(`<span style="color:var(--color-text-muted);font-size:0.78rem">positive = good for ${name}</span>`);
+    sections.push(`<b style="color:var(--color-text-muted);font-family:var(--font-family);font-size:0.82rem">${name}</b><br>`+lines.join('<br>'));
+  }
+  document.getElementById('score-breakdown').innerHTML=sections.join('<br><br>');
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+
+function triggerNextPlayer() {
+  if (state.gameOver) return;
+  if (isGameOver()) return;
+
+  // Auto-pass if current player has no legal moves
+  if (!legalMovesFor(state.board, state.turn).length) {
+    state.turn = state.turn === 'X' ? 'O' : 'X';
+    render(); updateStatus();
+    const gen = _aiGen;
+    setTimeout(() => { if (_aiGen === gen) triggerNextPlayer(); }, 300);
+    return;
+  }
+
+  const type = getPlayerType(state.turn);
+  render(); updateStatus();
+  if (type === 'human') return;
+
+  const name = state.turn === 'X' ? 'Black' : 'White';
+  document.getElementById('status-box').textContent = `${name} thinking...`;
+  runAI(reversiGame, getState(), ({move, arrowData}) => {
+    state.aiArrowData = arrowData;
+    if (move === null || move === PASS) {
+      state.turn = state.turn === 'X' ? 'O' : 'X';
+    } else {
+      state.board = doFlip(state.board, move, state.turn);
+      state.turn = state.turn === 'X' ? 'O' : 'X';
+    }
+    render(); updateStatus(); updateScorePanel();
+    if (!state.gameOver && !isGameOver()) {
+      const gen = _aiGen;
+      setTimeout(() => { if (_aiGen === gen) triggerNextPlayer(); }, getPlayerType(state.turn) !== 'human' ? 300 : 0);
+    }
+  });
+}
+
+function handleClick(idx) {
+  if (state.gameOver) return;
+  if (getPlayerType(state.turn) !== 'human') return;
+  if (!legalMovesFor(state.board, state.turn).includes(idx)) return;
+  state.aiArrowData = null;
+  state.board = doFlip(state.board, idx, state.turn);
+  state.turn = state.turn === 'X' ? 'O' : 'X';
+  render(); updateStatus(); updateScorePanel();
+  if (isGameOver()) return;
+  triggerNextPlayer();
+}
+
+function isGameOver() {
+  if (legalMovesFor(state.board,'X').length||legalMovesFor(state.board,'O').length) return false;
+  state.gameOver=true;
+  const {x,o}=countPieces(state.board);
+  const el=document.getElementById('status-box');
+  el.textContent = x>o ? 'Black wins!' : o>x ? 'White wins!' : 'Draw!';
+  render();
+  return true;
+}
+
+function updateStatus() {
+  if (state.gameOver) return;
+  const el=document.getElementById('status-box');
+  const name=state.turn==='X'?'Black':'White';
+  el.textContent=`${name}'s turn`;
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+const extraSettings=`
+  <hr style="border-color:var(--color-border); margin:8px 0;">
+  <div style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:8px;">Heuristic Weights <span style="font-size:0.75rem;">(0 = off)</span></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's piece count minus the opponent's piece count, multiplied by this weight.">Material</span><input type="number" id="hw-material" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Scans all board lines and sums run² for each consecutive run of the player's pieces. A run of 2 = 4 pts, run of 3 = 9 pts. Longer runs score exponentially more.">Line Completion</span><input type="number" id="hw-line" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the Manhattan distance to the board centre and maxD is the maximum such distance. Centre = 1, furthest point = 0.">Center Proximity</span><input type="number" id="hw-center" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the minimum Manhattan distance to any corner and maxD is the board's max distance. On a corner = 1, furthest cell ≈ 0.">Corner Proximity</span><input type="number" id="hw-corner" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores (maxD − d)/maxD, where d is the minimum distance to any board edge. Border pieces score 1, the centre scores 0.">Sides Proximity</span><input type="number" id="hw-sides" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's legal move count minus the opponent's legal move count. Higher means more options.">Mobility</span><input type="number" id="hw-mobility" value="0" min="0" step="1"></div>
+`;
+
+buildSidebar({
+  extraSettings,
+  mmDepthMax: 7, mmDepthDefault: 4,
+  uctSimsMax: 3000, uctSimsDefault: 800,
+  p1Label: 'Black', p2Label: 'White',
+  extraPanels: `<div class="panel"><h3>Rules</h3><div style="font-size:0.82rem;color:var(--color-text-muted);line-height:1.6;">
+    <b>Board:</b> 8×8 grid, starting with 2 pieces each in the centre.<br>
+    <b>Play:</b> Place a piece to flank one or more opponent rows; all flanked pieces flip to your colour. A move must flip at least one piece.<br>
+    <b>Pass:</b> If no legal move exists, the turn passes to the opponent.<br>
+    <b>Win:</b> When the board is full (or neither player can move), the player with the most pieces wins.
+  </div></div>`,
+});
+
+setupSharedUI({
+  onAlgoChange: ()=>updateScorePanel(),
+  onNewGame: newGame,
+  onRender: render,
+  onPlayerChange: triggerNextPlayer,
+});
+
+newGame();
+</script>
+</body>
+</html>

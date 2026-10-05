@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Particle Swarm Optimization</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-family);
+    background: var(--color-bg-page);
+    color: var(--color-text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-xl) 16px;
+    gap: var(--space-lg);
+  }
+
+  h1 {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+    background: var(--gradient-title);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-sub { font-size: var(--font-size-base); color: var(--color-text-muted); text-align: center; }
+  .header-credit { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+  .container {
+    max-width: 1100px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .panel h2 {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    color: var(--color-text);
+  }
+
+  .row { display: flex; gap: var(--space-xl); flex-wrap: wrap; align-items: stretch; }
+  .row > .flex-1 { flex: 1 1 320px; }
+
+  .field-row { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+  .field { flex: 1 1 100px; display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+  }
+  .field input {
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    color: var(--color-text);
+    font-size: var(--font-size-ui);
+    outline: none;
+    width: 100%;
+  }
+  .field input:focus { border-color: var(--color-primary); }
+
+  .btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: var(--font-size-ui);
+    font-weight: var(--font-weight-semi);
+    cursor: pointer;
+    transition: var(--transition-fast);
+  }
+  .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+  .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+  .btn-primary:disabled { background: var(--color-disabled-bg); color: var(--color-disabled-text); cursor: not-allowed; }
+  .btn-secondary { background: var(--color-bg-hover); color: var(--color-text); }
+  .btn-secondary:hover:not(:disabled) { background: var(--color-bg-hover-dark); }
+  .btn-secondary:disabled { color: var(--color-text-muted); cursor: not-allowed; opacity: 0.6; }
+
+  .btn-row { display: flex; gap: var(--space-sm); }
+  .btn-row .btn { flex: 1; }
+
+  .divider { margin: 2px 0; border-bottom: 1px solid var(--color-border); }
+
+  /* ── Checkboxes ── */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+  .checkbox-row input { accent-color: var(--color-primary); }
+  .checkbox-row label { cursor: pointer; }
+
+  /* ── Speed control ── */
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--font-size-base);
+    color: var(--color-text-muted);
+  }
+  .speed-row input[type=range] { flex: 1; accent-color: var(--color-accent); }
+
+  /* ── Canvas wrapper ── */
+  .canvas-wrap {
+    position: relative;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    flex: 1;
+    min-height: 400px;
+  }
+  #stage { display: block; width: 100%; height: 100%; }
+
+  /* ── Stats ── */
+  .best-line { font-size: var(--font-size-base); }
+  .best-line .label {
+    display: inline-block;
+    min-width: 90px;
+    font-weight: var(--font-weight-semi);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+    margin-right: var(--space-sm);
+  }
+
+  /* ── Explanation section ── */
+  #explanation h2 { margin-top: var(--space-md); }
+  #explanation h2:first-child { margin-top: 0; }
+  #explanation h3 {
+    font-size: var(--font-size-ui);
+    font-weight: var(--font-weight-semi);
+    color: var(--color-text);
+    margin-top: var(--space-sm);
+  }
+  #explanation p, #explanation li {
+    line-height: 1.6;
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+  #explanation ol { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .formula {
+    font-family: "Cambria Math", Cambria, Georgia, serif;
+    font-size: 15px;
+    text-align: center;
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+  }
+  table.var-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-base);
+  }
+  table.var-table th, table.var-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.var-table th {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+  }
+  table.var-table td:first-child { white-space: nowrap; font-weight: var(--font-weight-semi); }
+  table.var-table td:nth-child(2) { white-space: nowrap; color: var(--color-text-muted); font-family: monospace; }
+
+  canvas { max-width: 100%; }
+
+  @media (max-width: 768px) {
+    .row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Particle Swarm Optimization</h1>
+<div class="header-sub">A flock of birds searching an area for its highest point</div>
+
+<div class="container">
+
+  <div class="row">
+    <div class="panel flex-1" style="flex: 2 1 600px;">
+      <h2>Visualisation</h2>
+      <div class="canvas-wrap">
+        <canvas id="stage"></canvas>
+      </div>
+    </div>
+
+    <div class="panel" style="flex: 1 1 280px;">
+      <h2>Setup</h2>
+      <div class="field-row">
+        <div class="field"><label for="nrOfBirds"># of birds</label><input type="number" id="nrOfBirds" min="1" max="200" value="10"></div>
+        <div class="field"><label for="nrOfIterations">Iterations</label><input type="number" id="nrOfIterations" step="1" min="1" value="20"></div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" id="generateBtn" style="width:100%;">Generate</button>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="runStopBtn" disabled style="width:100%;">Run</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Parameters</h2>
+      <div class="field-row">
+        <div class="field" title="How strongly each bird is pulled toward its own personal best"><label for="personalWeight">Personal weight</label><input type="number" id="personalWeight" step="0.05" min="0" max="1" value="0.5"></div>
+        <div class="field" title="How strongly each bird is pulled toward the flock's global best"><label for="globalWeight">Global weight</label><input type="number" id="globalWeight" step="0.05" min="0" max="1" value="0.5"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Playback</h2>
+      <div class="checkbox-row" title="Starting from next iteration will either hide or show each bird's velocity">
+        <input type="checkbox" id="skipDrawingVectors"><label for="skipDrawingVectors">Skip drawing velocity</label>
+      </div>
+      <div class="speed-row">
+        Slow
+        <input type="range" id="speed" min="1" max="20" step="1" value="4">
+        Fast
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Stats</h2>
+      <div class="best-line"><span class="label">Iteration</span><span id="iteration">0</span></div>
+      <div class="best-line"><span class="label">G<sub>best</sub> height</span><span id="bestValue">NaN</span></div>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel" style="display:none;">
+    <h2>Results</h2>
+    <div style="height:220px;">
+      <canvas id="fitnessChart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel" id="explanation">
+    <h2>The Problem: Finding the Highest Point</h2>
+    <p>
+      Imagine a flock of birds flying over an area, trying to find its highest point. Each bird can move
+      freely, but can only sense the height of the ground directly beneath it &mdash; it has no map of the
+      surrounding terrain. Flying blind like this, how can the flock efficiently search the whole area and
+      converge on the highest point?
+    </p>
+
+    <h2>The Algorithm: Particle Swarm Optimization</h2>
+    <p>
+      Each bird's current position, P = (x<sub>1</sub>, x<sub>2</sub>), represents a possible solution to the
+      problem &mdash; similar to a chromosome in a genetic algorithm, but suited to continuous-value domains.
+      The quality of that position is measured with a <strong>fitness function</strong> f(x<sub>1</sub>,
+      x<sub>2</sub>), which in this example simply returns the height of the ground at that position.
+    </p>
+    <p>
+      At any given time, each bird tracks two things: its <strong>position</strong> P and its
+      <strong>velocity</strong> v (the direction and speed it's currently moving in). Each bird also
+      remembers the best position it has personally found so far &mdash; its <strong>P<sub>best</sub></strong>
+      (personal best) &mdash; as well as the best position found by the whole flock, the
+      <strong>G<sub>best</sub></strong> (global best).
+    </p>
+
+    <h3>How one iteration works</h3>
+    <ol>
+      <li>Every bird starts at a random position with a random initial velocity.</li>
+      <li>Each bird measures the height at its current position using the fitness function.</li>
+      <li>If this is the best height that bird has personally found, it updates its P<sub>best</sub>. If it's the best
+        found by any bird so far, it updates the flock's G<sub>best</sub>.</li>
+      <li>Each bird updates its velocity, pulling it toward its own P<sub>best</sub> and toward the flock's G<sub>best</sub>.</li>
+      <li>Each bird moves to its new position by applying its updated velocity.</li>
+      <li>The process repeats for the next iteration.</li>
+    </ol>
+
+    <h3>The velocity and position update formulas</h3>
+    <p>Each time step, every bird updates its position and velocity using the following formulas:</p>
+    <div class="formula">
+      v = v + c<sub>1</sub> ( P<sub>best</sub> &minus; P ) + c<sub>2</sub> ( G<sub>best</sub> &minus; P )
+      <br>
+      P = P + v
+    </div>
+    <p>
+      The velocity update pulls the bird toward the best position it has personally found (P<sub>best</sub>) and the
+      best position the whole flock has found (G<sub>best</sub>). The bird then moves in the direction of its velocity.
+      The size of each pull is controlled by the <strong>personal weight</strong> (c<sub>1</sub>) and
+      <strong>global weight</strong> (c<sub>2</sub>) &mdash; raising one relative to the other makes birds
+      rely more on their own experience or more on the flock's, respectively.
+    </p>
+
+    <h2>Meaning of each variable / control</h2>
+    <table class="var-table">
+      <thead>
+        <tr><th>Control</th><th>Symbol</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Position</td><td>P</td>
+          <td>A bird's current location (x<sub>1</sub>, x<sub>2</sub>) in the search area &mdash; a candidate
+            solution to the problem.</td>
+        </tr>
+        <tr>
+          <td>Velocity</td><td>v</td>
+          <td>The direction and speed a bird is currently moving in. Updated each iteration based on
+            P<sub>best</sub> and G<sub>best</sub>.</td>
+        </tr>
+        <tr>
+          <td>Personal best</td><td>P<sub>best</sub></td>
+          <td>The highest point a bird has personally found so far.</td>
+        </tr>
+        <tr>
+          <td>Global best</td><td>G<sub>best</sub></td>
+          <td>The highest point found by any bird in the flock so far.</td>
+        </tr>
+        <tr>
+          <td># of birds</td><td>N</td>
+          <td>How many birds make up the flock. More birds explore more of the area per iteration but cost
+            more to simulate.</td>
+        </tr>
+        <tr>
+          <td>Personal weight</td><td>c<sub>1</sub></td>
+          <td>How strongly each bird is pulled toward its own personal best (P<sub>best</sub>), from 0 (ignore it
+            entirely) to 1 (full pull).</td>
+        </tr>
+        <tr>
+          <td>Global weight</td><td>c<sub>2</sub></td>
+          <td>How strongly each bird is pulled toward the flock's global best (G<sub>best</sub>), from 0 (ignore it
+            entirely) to 1 (full pull). Raising this relative to the personal weight makes the flock converge
+            faster but explore less.</td>
+        </tr>
+        <tr>
+          <td>Iterations</td><td>&mdash;</td>
+          <td>How many rounds of "measure height, update memory, update velocity, move" the simulation will
+            run before stopping automatically.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- DOM ----------
+  var canvas = document.getElementById('stage');
+  var ctx = canvas.getContext('2d');
+  var nrOfBirdsInput = document.getElementById('nrOfBirds');
+  var nrOfIterationsInput = document.getElementById('nrOfIterations');
+  var personalWeightInput = document.getElementById('personalWeight');
+  var globalWeightInput = document.getElementById('globalWeight');
+  var speedInput = document.getElementById('speed');
+  var skipDrawingVectorsInput = document.getElementById('skipDrawingVectors');
+  var generateBtn = document.getElementById('generateBtn');
+  var runStopBtn = document.getElementById('runStopBtn');
+  var iterationSpan = document.getElementById('iteration');
+  var bestValueSpan = document.getElementById('bestValue');
+  var resultsPanel = document.getElementById('resultsPanel');
+
+  // ---------- The terrain (domain: [0, 5] in each dimension) ----------
+  // A few overlapping hills of varying height, representing the area the flock flies over.
+  // Regenerated randomly each time the user clicks Generate.
+  var DOMAIN_MIN = 0, DOMAIN_MAX = 5;
+  var peaks = [];
+
+  function randomisePeaks() {
+    var n = 3 + Math.floor(Math.random() * 4); // 3 - 6 peaks
+    peaks = [];
+    for (var i = 0; i < n; i++) {
+      peaks.push({
+        cx: randRange(DOMAIN_MIN + 0.5, DOMAIN_MAX - 0.5),
+        cy: randRange(DOMAIN_MIN + 0.5, DOMAIN_MAX - 0.5),
+        height: randRange(4, 16),
+        spread: randRange(0.5, 1.2),
+      });
+    }
+  }
+
+  function height(x, y) {
+    var total = 0;
+    for (var i = 0; i < peaks.length; i++) {
+      var p = peaks[i];
+      var dx = x - p.cx, dy = y - p.cy;
+      total += p.height * Math.exp(-(dx * dx + dy * dy) / (2 * p.spread * p.spread));
+    }
+    return total;
+  }
+
+  // ---------- Colour map (viridis) ----------
+  var VIRIDIS_STOPS = [
+    { t: 0.00, r: 68, g: 1, b: 84 },
+    { t: 0.25, r: 59, g: 82, b: 139 },
+    { t: 0.50, r: 33, g: 145, b: 140 },
+    { t: 0.75, r: 94, g: 201, b: 98 },
+    { t: 1.00, r: 253, g: 231, b: 37 },
+  ];
+  function viridis(t) {
+    t = Math.max(0, Math.min(1, t));
+    for (var i = 0; i < VIRIDIS_STOPS.length - 1; i++) {
+      var a = VIRIDIS_STOPS[i], b = VIRIDIS_STOPS[i + 1];
+      if (t >= a.t && t <= b.t) {
+        var f = (t - a.t) / (b.t - a.t);
+        return {
+          r: Math.round(a.r + (b.r - a.r) * f),
+          g: Math.round(a.g + (b.g - a.g) * f),
+          b: Math.round(a.b + (b.b - a.b) * f),
+        };
+      }
+    }
+    return VIRIDIS_STOPS[VIRIDIS_STOPS.length - 1];
+  }
+
+  // ---------- Plot layout (colorbar chrome around the plot area) ----------
+  var MARGIN = { top: 10, bottom: 10, left: 10, right: 68 };
+
+  function plotArea() {
+    return {
+      x0: MARGIN.left,
+      y0: MARGIN.top,
+      x1: canvas.width - MARGIN.right,
+      y1: canvas.height - MARGIN.bottom,
+    };
+  }
+
+  // ---------- Results chart ----------
+  // Chart.js comes from a CDN. If it didn't load, the visualisation still works; only
+  // the results chart is replaced by a message.
+  var fitnessChart = null;
+  if (!window.Chart) {
+    document.getElementById('fitnessChart').parentNode.innerHTML = '<p style="margin:0; color:var(--color-text-muted);">This chart couldn\'t be shown because its charting library (Chart.js) failed to load. Check your internet connection and reload the page.</p>';
+  } else fitnessChart = new Chart(document.getElementById('fitnessChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Gbest height',
+        data: [],
+        borderColor: '#7c3aed',
+        backgroundColor: '#7c3aed',
+        tension: 0.2,
+        pointRadius: 0,
+      }],
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            label: function (context) { return context.parsed.y.toFixed(3); },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Iteration' } },
+        y: {
+          title: { display: true, text: 'Gbest height' },
+          ticks: { callback: function (value) { return Number(value).toFixed(1); } },
+        },
+      },
+    },
+  });
+
+  function resetChart() {
+    if (!fitnessChart) return;
+    fitnessChart.data.labels = [];
+    fitnessChart.data.datasets[0].data = [];
+    fitnessChart.update();
+  }
+
+  function pushChartPoint(iteration, value) {
+    if (!fitnessChart) return;
+    fitnessChart.data.labels.push(iteration);
+    fitnessChart.data.datasets[0].data.push(value);
+    fitnessChart.update();
+  }
+
+  var lastGrid = null, lastRes = 0;
+
+  function resizeCanvas() {
+    var rect = canvas.parentNode.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    if (lastGrid) terrainCanvas = buildTerrain(lastGrid, lastRes); // rebuild at new plot-area size
+  }
+  window.addEventListener('resize', function () { resizeCanvas(); draw(); });
+  resizeCanvas();
+
+  // ---------- State ----------
+  var birds = [];           // {x, y, vx, vy, sx, sy, pbestX, pbestY, pbestHeight}
+  var globalBest;           // {x, y, height}
+  var isRunning = false;
+  var iterationCount = 0;
+  var animationSpeed = Number(speedInput.value);
+  var runToken = 0;
+  var terrainCanvas = null;
+  var contourLevels = [];
+  var contourSegments = [];
+
+  // ---------- Helpers ----------
+  function randRange(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function worldToScreen(x, y) {
+    var a = plotArea();
+    var w = a.x1 - a.x0, h = a.y1 - a.y0;
+    return {
+      x: a.x0 + ((x - DOMAIN_MIN) / (DOMAIN_MAX - DOMAIN_MIN)) * w,
+      y: a.y1 - ((y - DOMAIN_MIN) / (DOMAIN_MAX - DOMAIN_MIN)) * h,
+    };
+  }
+
+  // ---------- Sampled height grid (shared by the terrain fill and the contour lines) ----------
+  var terrainMin = 0, terrainMax = 0;
+
+  function sampleGrid(res) {
+    var grid = new Array(res);
+    terrainMin = Infinity;
+    terrainMax = -Infinity;
+    for (var j = 0; j < res; j++) {
+      var y = DOMAIN_MIN + (j / (res - 1)) * (DOMAIN_MAX - DOMAIN_MIN);
+      grid[j] = new Array(res);
+      for (var i = 0; i < res; i++) {
+        var x = DOMAIN_MIN + (i / (res - 1)) * (DOMAIN_MAX - DOMAIN_MIN);
+        var v = height(x, y);
+        grid[j][i] = v;
+        if (v < terrainMin) terrainMin = v;
+        if (v > terrainMax) terrainMax = v;
+      }
+    }
+    return grid;
+  }
+
+  // ---------- Terrain colour fill ----------
+  function buildTerrain(grid, res) {
+    var off = document.createElement('canvas');
+    off.width = res;
+    off.height = res;
+    var octx = off.getContext('2d');
+    var img = octx.createImageData(res, res);
+
+    for (var j = 0; j < res; j++) {
+      for (var i = 0; i < res; i++) {
+        var norm = (grid[j][i] - terrainMin) / (terrainMax - terrainMin || 1);
+        var c = viridis(norm);
+        // flip vertically: grid row 0 = y=DOMAIN_MIN (bottom), image row 0 = top
+        var idx = ((res - 1 - j) * res + i) * 4;
+        img.data[idx] = c.r;
+        img.data[idx + 1] = c.g;
+        img.data[idx + 2] = c.b;
+        img.data[idx + 3] = 255;
+      }
+    }
+    octx.putImageData(img, 0, 0);
+
+    var a = plotArea();
+    var scaled = document.createElement('canvas');
+    scaled.width = Math.max(1, a.x1 - a.x0);
+    scaled.height = Math.max(1, a.y1 - a.y0);
+    var sctx = scaled.getContext('2d');
+    sctx.imageSmoothingEnabled = true;
+    sctx.drawImage(off, 0, 0, scaled.width, scaled.height);
+    return scaled;
+  }
+
+  // ---------- Contour lines (marching squares) ----------
+  function buildContours(grid, res, levels) {
+    var segments = [];
+    function interp(a, b, va, vb, level) {
+      if (vb === va) return a;
+      return a + (level - va) / (vb - va) * (b - a);
+    }
+    levels.forEach(function (level) {
+      for (var j = 0; j < res - 1; j++) {
+        for (var i = 0; i < res - 1; i++) {
+          var v00 = grid[j][i], v10 = grid[j][i + 1];
+          var v01 = grid[j + 1][i], v11 = grid[j + 1][i + 1];
+          var pts = [];
+          if ((v00 - level) * (v10 - level) < 0) pts.push({ x: interp(i, i + 1, v00, v10, level), y: j });
+          if ((v01 - level) * (v11 - level) < 0) pts.push({ x: interp(i, i + 1, v01, v11, level), y: j + 1 });
+          if ((v00 - level) * (v01 - level) < 0) pts.push({ x: i, y: interp(j, j + 1, v00, v01, level) });
+          if ((v10 - level) * (v11 - level) < 0) pts.push({ x: i + 1, y: interp(j, j + 1, v10, v11, level) });
+          if (pts.length === 2) {
+            segments.push([pts[0], pts[1]]);
+          } else if (pts.length === 4) {
+            segments.push([pts[0], pts[1]]);
+            segments.push([pts[2], pts[3]]);
+          }
+        }
+      }
+    });
+    // convert grid-index coordinates to world coordinates
+    return segments.map(function (seg) {
+      return seg.map(function (p) {
+        return {
+          x: DOMAIN_MIN + (p.x / (res - 1)) * (DOMAIN_MAX - DOMAIN_MIN),
+          y: DOMAIN_MIN + (p.y / (res - 1)) * (DOMAIN_MAX - DOMAIN_MIN),
+        };
+      });
+    });
+  }
+
+  // ---------- Generate flock ----------
+  function generate() {
+    if (isRunning) stop();
+    randomisePeaks();
+
+    var n = Math.max(1, Math.min(200, Number(nrOfBirdsInput.value) || 0));
+    nrOfBirdsInput.value = n;
+    globalBest = undefined;
+    bestValueSpan.textContent = 'NaN';
+    iterationCount = 0;
+    iterationSpan.textContent = '0';
+    resetChart();
+    resultsPanel.style.display = 'none';
+
+    birds = [];
+    var vmax = (DOMAIN_MAX - DOMAIN_MIN) * 0.1;
+    for (var i = 0; i < n; i++) {
+      var x = randRange(DOMAIN_MIN, DOMAIN_MAX);
+      var y = randRange(DOMAIN_MIN, DOMAIN_MAX);
+      var h = height(x, y);
+      var b = {
+        x: x, y: y,
+        vx: randRange(-vmax, vmax), vy: randRange(-vmax, vmax),
+        pbestX: x, pbestY: y, pbestHeight: h,
+      };
+      var s = worldToScreen(x, y);
+      b.sx = s.x; b.sy = s.y;
+      birds.push(b);
+      if (!globalBest || h > globalBest.height) {
+        globalBest = { x: x, y: y, height: h };
+      }
+    }
+    bestValueSpan.textContent = globalBest.height.toFixed(3);
+
+    var res = 120;
+    var grid = sampleGrid(res);
+    lastGrid = grid;
+    lastRes = res;
+    terrainCanvas = buildTerrain(grid, res);
+    var numLevels = 9;
+    contourLevels = [];
+    for (var k = 1; k <= numLevels; k++) {
+      contourLevels.push(terrainMin + (k / (numLevels + 1)) * (terrainMax - terrainMin));
+    }
+    contourSegments = buildContours(grid, res, contourLevels);
+
+    runStopBtn.disabled = false;
+    draw();
+  }
+
+  // ---------- PSO update ----------
+  function stepFlock() {
+    var vmax = (DOMAIN_MAX - DOMAIN_MIN) * 0.2;
+    var c1 = Number(personalWeightInput.value);
+    var c2 = Number(globalWeightInput.value);
+    birds.forEach(function (b) {
+      b.vx = b.vx + c1 * (b.pbestX - b.x) + c2 * (globalBest.x - b.x);
+      b.vy = b.vy + c1 * (b.pbestY - b.y) + c2 * (globalBest.y - b.y);
+      b.vx = Math.max(-vmax, Math.min(vmax, b.vx));
+      b.vy = Math.max(-vmax, Math.min(vmax, b.vy));
+
+      var newX = b.x + b.vx;
+      var newY = b.y + b.vy;
+      if (newX < DOMAIN_MIN) { newX = DOMAIN_MIN; b.vx *= -0.5; }
+      if (newX > DOMAIN_MAX) { newX = DOMAIN_MAX; b.vx *= -0.5; }
+      if (newY < DOMAIN_MIN) { newY = DOMAIN_MIN; b.vy *= -0.5; }
+      if (newY > DOMAIN_MAX) { newY = DOMAIN_MAX; b.vy *= -0.5; }
+
+      b.targetX = newX;
+      b.targetY = newY;
+    });
+  }
+
+  function commitPositions() {
+    birds.forEach(function (b) {
+      b.x = b.targetX;
+      b.y = b.targetY;
+      var h = height(b.x, b.y);
+      if (h > b.pbestHeight) {
+        b.pbestHeight = h;
+        b.pbestX = b.x;
+        b.pbestY = b.y;
+      }
+      if (h > globalBest.height) {
+        globalBest = { x: b.x, y: b.y, height: h };
+      }
+    });
+  }
+
+  function animateStep(token) {
+    return new Promise(function (resolve) {
+      var end = birds.map(function (b) { return { x: b.targetX, y: b.targetY }; });
+
+      function frame() {
+        if (token !== runToken) { resolve(); return; }
+        var done = true;
+        for (var i = 0; i < birds.length; i++) {
+          var b = birds[i];
+          var s1 = worldToScreen(end[i].x, end[i].y);
+          var dx = s1.x - b.sx, dy = s1.y - b.sy;
+          var dist = Math.hypot(dx, dy);
+          if (dist < animationSpeed) {
+            b.sx = s1.x; b.sy = s1.y;
+          } else {
+            b.sx += animationSpeed * dx / dist;
+            b.sy += animationSpeed * dy / dist;
+            done = false;
+          }
+        }
+        draw();
+        if (done) resolve();
+        else requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  // ---------- Drawing ----------
+  function drawColorbar() {
+    var a = plotArea();
+    var barX = a.x1 + 14, barW = 14;
+    var grad = ctx.createLinearGradient(0, a.y0, 0, a.y1);
+    var steps = 10;
+    for (var k = 0; k <= steps; k++) {
+      var t = k / steps; // 0 = top (max), 1 = bottom (min)
+      var c = viridis(1 - t);
+      grad.addColorStop(t, 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')');
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX, a.y0, barW, a.y1 - a.y0);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, a.y0, barW, a.y1 - a.y0);
+
+    ctx.fillStyle = '#000000';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    var labelSteps = 6;
+    for (var i = 0; i <= labelSteps; i++) {
+      var frac = i / labelSteps; // 0 = bottom (min), 1 = top (max)
+      var value = terrainMin + frac * (terrainMax - terrainMin);
+      var y = a.y1 - frac * (a.y1 - a.y0);
+      ctx.beginPath();
+      ctx.moveTo(barX + barW, y);
+      ctx.lineTo(barX + barW + 3, y);
+      ctx.stroke();
+      ctx.fillText(value.toFixed(1), barX + barW + 5, y);
+    }
+  }
+
+  function drawContours() {
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 0.75;
+    contourSegments.forEach(function (seg) {
+      var s0 = worldToScreen(seg[0].x, seg[0].y);
+      var s1 = worldToScreen(seg[1].x, seg[1].y);
+      ctx.beginPath();
+      ctx.moveTo(s0.x, s0.y);
+      ctx.lineTo(s1.x, s1.y);
+      ctx.stroke();
+    });
+  }
+
+  function drawArrow(x0, y0, x1, y1) {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    var angle = Math.atan2(y1 - y0, x1 - x0);
+    var headLen = 5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - headLen * Math.cos(angle - Math.PI / 6), y1 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x1 - headLen * Math.cos(angle + Math.PI / 6), y1 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var a = plotArea();
+    if (terrainCanvas) {
+      ctx.drawImage(terrainCanvas, a.x0, a.y0);
+    }
+    drawContours();
+
+    // velocity vectors — anchored at the start of this iteration's move (fixed for the
+    // whole flight) so the bird's dot travels from tail to tip along it, rather than
+    // the arrow translating along with the animated dot.
+    if (!skipDrawingVectorsInput.checked) {
+      ctx.strokeStyle = '#2563eb';
+      ctx.fillStyle = '#2563eb';
+      ctx.lineWidth = 1.5;
+      birds.forEach(function (b) {
+        // Use the bird's actual target for this iteration when available — after a
+        // boundary bounce, b.x + b.vx no longer matches where the bird is really headed.
+        var tipX = b.targetX !== undefined ? b.targetX : b.x + b.vx;
+        var tipY = b.targetY !== undefined ? b.targetY : b.y + b.vy;
+        var s0 = worldToScreen(b.x, b.y);
+        var s1 = worldToScreen(tipX, tipY);
+        drawArrow(s0.x, s0.y, s1.x, s1.y);
+      });
+    }
+
+    // birds
+    ctx.fillStyle = '#3f3f46';
+    birds.forEach(function (b) {
+      ctx.beginPath();
+      ctx.arc(b.sx, b.sy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // global best marker (X)
+    if (globalBest) {
+      var gs = worldToScreen(globalBest.x, globalBest.y);
+      var r = 5;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000000';
+      ctx.beginPath();
+      ctx.moveTo(gs.x - r, gs.y - r); ctx.lineTo(gs.x + r, gs.y + r);
+      ctx.moveTo(gs.x - r, gs.y + r); ctx.lineTo(gs.x + r, gs.y - r);
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(gs.x - r, gs.y - r); ctx.lineTo(gs.x + r, gs.y + r);
+      ctx.moveTo(gs.x - r, gs.y + r); ctx.lineTo(gs.x + r, gs.y - r);
+      ctx.stroke();
+    }
+
+    if (terrainCanvas) drawColorbar();
+  }
+
+  // ---------- Run / Stop ----------
+  function stop() {
+    isRunning = false;
+    runToken++;
+    runStopBtn.textContent = 'Run';
+    draw();
+  }
+
+  function run() {
+    if (birds.length === 0) return;
+    var nrOfIterations = Number(nrOfIterationsInput.value);
+
+    iterationCount = 0;
+    iterationSpan.textContent = '0';
+    resetChart();
+    resultsPanel.style.display = '';
+
+    isRunning = true;
+    runToken++;
+    var token = runToken;
+    runStopBtn.textContent = 'Stop';
+
+    function iterate() {
+      if (token !== runToken) return; // stopped
+      if (iterationCount >= nrOfIterations) { stop(); return; }
+
+      stepFlock();
+      var proceed = function () {
+        if (token !== runToken) return;
+        commitPositions();
+        iterationCount++;
+        iterationSpan.textContent = iterationCount;
+        bestValueSpan.textContent = globalBest.height.toFixed(3);
+        pushChartPoint(iterationCount, globalBest.height);
+        draw();
+        setTimeout(iterate, 0);
+      };
+
+      animateStep(token).then(proceed);
+    }
+    iterate();
+  }
+
+  // ---------- Events ----------
+  generateBtn.addEventListener('click', generate);
+  runStopBtn.addEventListener('click', function () {
+    if (isRunning) stop(); else run();
+  });
+  speedInput.addEventListener('input', function () {
+    animationSpeed = Number(speedInput.value);
+  });
+
+  // initial draw
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze Solver</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-family);
+      background: var(--color-bg-page);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--space-xl) 16px;
+      gap: var(--space-lg);
+    }
+
+    h1 {
+      font-size: var(--font-size-title);
+      font-weight: var(--font-weight-bold);
+      background: var(--gradient-title);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .layout {
+      display: flex;
+      gap: var(--space-xl);
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--color-bg-panel);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      min-width: 240px;
+    }
+
+    .panel h2 {
+      font-size: var(--font-size-label);
+      font-weight: var(--font-weight-semi);
+      text-transform: uppercase;
+      letter-spacing: var(--letter-spacing-label);
+      color: var(--color-text);
+    }
+
+    /* ── Tool buttons ── */
+    .tool-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      border: 2px solid transparent;
+      background: var(--color-bg-input);
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: var(--font-size-ui);
+      transition: var(--transition-fast);
+    }
+    .tool-btn:hover { background: var(--color-bg-hover); }
+    .tool-btn.active {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+      color: var(--color-primary-text);
+    }
+    .tool-dot {
+      width: 16px; height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ── Speed control ── */
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: var(--font-size-base);
+      color: var(--color-text);
+    }
+    .speed-row input[type=range] { flex: 1; accent-color: var(--color-accent); }
+
+    /* ── Algorithm select ── */
+    select {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-input);
+      color: var(--color-text);
+      font-size: var(--font-size-ui);
+      cursor: pointer;
+      outline: none;
+    }
+    select:focus { border-color: var(--color-primary); }
+
+    /* ── Action buttons ── */
+    .btn {
+      padding: 10px 16px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-size: var(--font-size-ui);
+      font-weight: var(--font-weight-semi);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+    .btn-primary:hover { background: var(--color-primary-hover); }
+    .btn-primary:disabled { background: var(--color-disabled-bg); color: var(--color-disabled-text); cursor: not-allowed; }
+    .btn-secondary { background: var(--color-bg-hover); color: var(--color-text); }
+    .btn-secondary:hover { background: var(--color-bg-hover-dark); }
+    .btn-danger { background: var(--color-danger-bg); color: var(--color-danger-text); }
+    .btn-danger:hover { background: var(--color-danger-hover); }
+
+    .btn-row { display: flex; gap: var(--space-sm); }
+    .btn-row .btn { flex: 1; }
+
+    /* ── Stats ── */
+    .stats {
+      font-size: 0.82rem;
+      color: var(--color-text);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stats span { color: var(--color-text); }
+    .stats strong { color: var(--color-text); }
+
+    /* ── Legend ── */
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-xs);
+      font-size: var(--font-size-sm);
+      color: var(--color-text);
+    }
+    .legend-item { display: flex; align-items: center; gap: var(--space-xs); }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+
+    /* ── Canvas wrapper ── */
+    .canvas-wrap {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      cursor: crosshair;
+      flex-shrink: 0;
+      background: var(--color-bg-panel);
+    }
+    #grid-canvas { display: block; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: var(--space-xl);
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--color-toast-bg);
+      border: 1px solid var(--color-toast-border);
+      color: var(--color-text-inverse);
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-base);
+      transition: var(--transition-toast);
+      pointer-events: none;
+      z-index: 100;
+      white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<h1>Maze Solver</h1>
+
+<div class="layout">
+  <!-- Left panel -->
+  <div class="panel" style="width:240px;">
+    <h2>Draw</h2>
+    <div class="tool-group">
+      <button class="tool-btn active" id="tool-wall" onclick="setTool('wall')">
+        <span class="tool-dot" style="background:#475569;"></span> Wall
+      </button>
+      <button class="tool-btn" id="tool-empty" onclick="setTool('empty')">
+        <span class="tool-dot" style="background:#f8fafc;border:1px solid #cbd5e1;"></span> Erase
+      </button>
+      <button class="tool-btn" id="tool-start" onclick="setTool('start')">
+        <span class="tool-dot" style="background:#16a34a;"></span> Start
+      </button>
+      <button class="tool-btn" id="tool-goal" onclick="setTool('goal')">
+        <span class="tool-dot" style="background:#ef4444;"></span> Goal
+      </button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-danger" onclick="clearGrid()">Clear</button>
+    </div>
+
+    <h2>Legend</h2>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:#475569;"></span>Wall</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#f8fafc;border:1px solid #cbd5e1;"></span>Empty</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#16a34a;"></span>Start</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ef4444;"></span>Goal</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#93c5fd;"></span>Visited</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#fbbf24;"></span>Path</div>
+    </div>
+  </div>
+
+  <!-- Grid -->
+  <div class="canvas-wrap">
+    <canvas id="grid-canvas"></canvas>
+  </div>
+
+  <!-- Right panel -->
+  <div class="panel" style="width:240px;">
+    <h2>Algorithm</h2>
+    <select id="algo-select">
+      <option value="dfs">Depth-First</option>
+      <option value="bfs">Breadth-First</option>
+      <option value="hillclimbing">Hill Climbing</option>
+      <option value="greedy">Best-First (Greedy)</option>
+      <option value="astar">A*</option>
+      <option value="dijkstra">Dijkstra's</option>
+    </select>
+
+    <h2>Animation Speed</h2>
+    <div class="speed-row">
+      Slow
+      <input type="range" id="speed-slider" min="1" max="100" value="50">
+      Fast
+    </div>
+
+    <button class="btn btn-primary" id="run-btn" onclick="runSearch()">Run</button>
+    <button class="btn btn-secondary" onclick="clearSearch()">Clear Search</button>
+
+    <h2>Stats</h2>
+    <div class="stats" id="stats">
+      <div><span>Status:</span> <strong id="stat-status">—</strong></div>
+      <div><span>States visited:</span> <strong id="stat-visited">—</strong></div>
+      <div><span>Path length:</span> <strong id="stat-path">—</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────────────────────────
+const CELL = 22; // px per cell (will auto-shrink for large grids)
+const COLORS = {
+  empty:   '#f8fafc',
+  empty2:  '#edf0f4',
+  wall:    '#475569',
+  start:   '#16a34a',
+  goal:    '#ef4444',
+  visited: '#93c5fd',
+  path:    '#fbbf24',
+  border:  '#e2e8f0',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const COLS = 20, ROWS = 18;
+let grid = [];         // 'empty' | 'wall' | 'start' | 'goal'
+let startCell = null;  // {r, c}
+let goalCell  = null;
+let currentTool = 'wall';
+let isRunning = false;
+let cancelFlag = false;
+let pendingFrame = null;  // { type: 'raf'|'timeout', id }
+
+function cancelPending() {
+  if (!pendingFrame) return;
+  if (pendingFrame.type === 'raf') cancelAnimationFrame(pendingFrame.id);
+  else clearTimeout(pendingFrame.id);
+  pendingFrame = null;
+}
+
+const canvas = document.getElementById('grid-canvas');
+const ctx    = canvas.getContext('2d');
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function initGrid() {
+  grid = Array.from({length: ROWS}, () => Array(COLS).fill('empty'));
+  startCell = null; goalCell = null;
+}
+
+function cellSize() {
+  const maxW = Math.min(window.innerWidth - 520, 800);
+  const maxH = Math.min(window.innerHeight - 150, 700);
+  return Math.max(8, Math.min(CELL, Math.floor(maxW / COLS), Math.floor(maxH / ROWS)));
+}
+
+function resizeCanvas() {
+  const cs = cellSize();
+  canvas.width  = COLS * cs;
+  canvas.height = ROWS * cs;
+}
+
+function drawGrid(visited = new Set(), path = []) {
+  const cs = cellSize();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const pathSet = new Set(path.map(([r,c]) => `${r},${c}`));
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const key = `${r},${c}`;
+      let color;
+
+      if (grid[r][c] === 'empty') {
+        if (pathSet.has(key))      color = COLORS.path;
+        else if (visited.has(key)) color = COLORS.visited;
+        else color = (r + c) % 2 === 0 ? COLORS.empty : COLORS.empty2;
+      } else {
+        color = COLORS[grid[r][c]];
+      }
+
+      ctx.fillStyle = color;
+      ctx.fillRect(c*cs+1, r*cs+1, cs-1, cs-1);
+    }
+  }
+}
+
+// ── Tool selection ────────────────────────────────────────────────────────────
+function setTool(t) {
+  currentTool = t;
+  ['wall','empty','start','goal'].forEach(id =>
+    document.getElementById(`tool-${id}`).classList.toggle('active', id === t));
+}
+
+// ── Mouse drawing ─────────────────────────────────────────────────────────────
+let painting = false;
+
+canvas.addEventListener('mousedown', e => { painting = true; paint(e); });
+canvas.addEventListener('mousemove', e => { if (painting) paint(e); });
+window.addEventListener('mouseup',   () => { painting = false; });
+canvas.addEventListener('touchstart', e => { painting = true; paint(e.touches[0]); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove',  e => { paint(e.touches[0]); e.preventDefault(); }, {passive:false});
+window.addEventListener('touchend',   () => { painting = false; });
+
+function paint(e) {
+  if (isRunning) return;
+  const rect = canvas.getBoundingClientRect();
+  const cs   = cellSize();
+  const c    = Math.floor((e.clientX - rect.left) / cs);
+  const r    = Math.floor((e.clientY - rect.top)  / cs);
+  if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
+
+  if (currentTool === 'start') {
+    if (startCell) grid[startCell.r][startCell.c] = 'empty';
+    startCell = {r, c};
+    grid[r][c] = 'start';
+  } else if (currentTool === 'goal') {
+    if (goalCell) grid[goalCell.r][goalCell.c] = 'empty';
+    goalCell = {r, c};
+    grid[r][c] = 'goal';
+  } else if (currentTool === 'wall') {
+    if (grid[r][c] === 'start') startCell = null;
+    if (grid[r][c] === 'goal')  goalCell  = null;
+    grid[r][c] = 'wall';
+  } else {
+    if (grid[r][c] === 'start') startCell = null;
+    if (grid[r][c] === 'goal')  goalCell  = null;
+    grid[r][c] = 'empty';
+  }
+  drawGrid();
+}
+
+// ── Grid controls ─────────────────────────────────────────────────────────────
+
+// Aborts any in-flight search and puts the controls back in their idle state.
+// Re-enabling run-btn here is essential: cancelPending() kills the scheduled
+// step(), so finish() -- the only other place that re-enables it -- would never run.
+function abortSearch() {
+  cancelPending();
+  cancelFlag = true;
+  isRunning  = false;
+  document.getElementById('run-btn').disabled = false;
+}
+
+function clearGrid() {
+  abortSearch();
+  initGrid();
+  resizeCanvas();
+  drawGrid();
+  resetStats();
+}
+
+function clearSearch() {
+  abortSearch();
+  drawGrid();
+  resetStats();
+}
+
+function resetStats() {
+  document.getElementById('stat-status').textContent  = '—';
+  document.getElementById('stat-visited').textContent = '—';
+  document.getElementById('stat-path').textContent    = '—';
+}
+
+// ── Search algorithms ─────────────────────────────────────────────────────────
+const DIRS = [[-1,0],[0,1],[1,0],[0,-1]]; // N, E, S, W
+
+function neighbors(r, c) {
+  const res = [];
+  for (const [dr, dc] of DIRS) {
+    const nr = r+dr, nc = c+dc;
+    if (nr>=0 && nr<ROWS && nc>=0 && nc<COLS && grid[nr][nc] !== 'wall')
+      res.push([nr, nc]);
+  }
+  return res;
+}
+
+function heuristic(r, c) {
+  return Math.sqrt((r - goalCell.r) ** 2 + (c - goalCell.c) ** 2);
+}
+
+function reconstructPath(parent, r, c) {
+  const path = [];
+  let key = `${r},${c}`;
+  while (key) {
+    const [pr, pc] = key.split(',').map(Number);
+    path.push([pr, pc]);
+    key = parent[key];
+  }
+  return path.reverse();
+}
+
+// Returns an async generator that yields snapshots {visited}
+// and finally resolves with path or null
+async function* bfsGen(sr, sc) {
+  const queue = [[sr, sc]];
+  const inL = new Set([`${sr},${sc}`]);   // tracks what is currently in L
+  const parent = { [`${sr},${sc}`]: null };
+  const visited = new Set(); // Lseen — only states that have been expanded
+
+  while (queue.length) {
+    const [r, c] = queue.shift();
+    const key = `${r},${c}`;
+    inL.delete(key);
+
+    // Step 3: check goal before adding to Lseen
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    // Steps 4–6: expand children, ignore those in Lseen or already in L
+    for (const [nr, nc] of neighbors(r, c)) {
+      const nkey = `${nr},${nc}`;
+      if (!visited.has(nkey) && !inL.has(nkey)) {
+        parent[nkey] = key;
+        inL.add(nkey);
+        queue.push([nr, nc]);
+      }
+    }
+
+    // Step 7: add s to Lseen after expanding
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+async function* dfsGen(sr, sc) {
+  const stack = [[sr, sc, null]]; // [row, col, parentKey]
+  const parent = { [`${sr},${sc}`]: null };
+  const visited = new Set(); // Lseen — only states that have been expanded
+
+  while (stack.length) {
+    const [r, c, par] = stack.pop();
+    const key = `${r},${c}`;
+    if (visited.has(key)) continue; // already in Lseen, skip
+
+    // Record parent from the stack entry (reflects actual DFS path taken)
+    parent[key] = par;
+
+    // Step 3: check goal before expanding
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    // Steps 4–6: expand children, ignore those in Lseen, push in reverse NESW
+    for (const [nr, nc] of [...neighbors(r, c)].reverse()) {
+      const nkey = `${nr},${nc}`;
+      if (!visited.has(nkey)) {
+        stack.push([nr, nc, key]);
+      }
+    }
+
+    // Step 7: add s to Lseen after expanding
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+async function* greedyGen(sr, sc) {
+  // heap entries: [heuristic, seq, row, col, parentKey]
+  let seq = 0;
+  const heap = new MinHeap(([h, s]) => h * 1e9 + s);
+  heap.push([heuristic(sr, sc), seq++, sr, sc, null]);
+  const parent = {};
+  const visited = new Set(); // Lseen
+
+  while (!heap.empty()) {
+    const [, , r, c, par] = heap.pop();
+    const key = `${r},${c}`;
+    if (visited.has(key)) continue; // lazy deletion for duplicates in L
+
+    parent[key] = par;
+
+    // Step 3: check goal before adding to Lseen
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    // Steps 5–6: expand children, ignore those in Lseen, put survivors in L
+    for (const [nr, nc] of neighbors(r, c)) {
+      const nkey = `${nr},${nc}`;
+      if (!visited.has(nkey)) {
+        heap.push([heuristic(nr, nc), seq++, nr, nc, key]);
+      }
+    }
+
+    // Step 6: add s to Lseen after expanding
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+async function* dijkstraGen(sr, sc) {
+  // heap entries: [g, seq, row, col, parentKey, gVal] — h is always 0
+  let seq = 0;
+  const heap = new MinHeap(([g, s]) => g * 1e9 + s);
+  heap.push([0, seq++, sr, sc, null, 0]);
+  const parent = {};
+  const visited = new Set(); // Lseen
+
+  while (!heap.empty()) {
+    const [, , r, c, par, gVal] = heap.pop();
+    const key = `${r},${c}`;
+    if (visited.has(key)) continue;
+
+    parent[key] = par;
+
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    for (const [nr, nc] of neighbors(r, c)) {
+      const nkey = `${nr},${nc}`;
+      if (!visited.has(nkey)) {
+        const ng = gVal + 1;
+        heap.push([ng, seq++, nr, nc, key, ng]);
+      }
+    }
+
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+async function* astarGen(sr, sc) {
+  // heap entries: [f=g+h, seq, row, col, parentKey, gVal]
+  let seq = 0;
+  const heap = new MinHeap(([f, s]) => f * 1e9 + s);
+  heap.push([heuristic(sr, sc), seq++, sr, sc, null, 0]);
+  const parent = {};
+  const visited = new Set(); // Lseen
+
+  while (!heap.empty()) {
+    const [, , r, c, par, gVal] = heap.pop();
+    const key = `${r},${c}`;
+    if (visited.has(key)) continue; // lazy deletion for duplicates in L
+
+    parent[key] = par;
+
+    // Step 1: check goal before adding to Lseen
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    // Steps 2–3: expand children, ignore those in Lseen, place rest in L
+    for (const [nr, nc] of neighbors(r, c)) {
+      const nkey = `${nr},${nc}`;
+      if (!visited.has(nkey)) {
+        const ng = gVal + 1;
+        heap.push([ng + heuristic(nr, nc), seq++, nr, nc, key, ng]);
+      }
+    }
+
+    // Step 4: remove s from L and add to Lseen (after expanding)
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+async function* hillClimbingGen(sr, sc) {
+  const stack = [[sr, sc, null]]; // [row, col, parentKey]
+  const parent = { [`${sr},${sc}`]: null };
+  const visited = new Set(); // Lseen
+
+  while (stack.length) {
+    const [r, c, par] = stack.pop();
+    const key = `${r},${c}`;
+    if (visited.has(key)) continue;
+
+    parent[key] = par;
+
+    // Step 3: check goal
+    if (r === goalCell.r && c === goalCell.c) {
+      visited.add(key);
+      yield { done: true, visited, path: reconstructPath(parent, r, c) };
+      return;
+    }
+
+    // Steps 4–6: get children, ignore those in Lseen, sort by heuristic ascending,
+    // push in reverse so the best (lowest h) is on top of the stack
+    const children = neighbors(r, c)
+      .filter(([nr, nc]) => !visited.has(`${nr},${nc}`))
+      .sort((a, b) => heuristic(b[0], b[1]) - heuristic(a[0], a[1])); // descending → best last → pops first
+
+    for (const [nr, nc] of children) {
+      stack.push([nr, nc, key]);
+    }
+
+    // Step 7: add s to Lseen
+    visited.add(key);
+    yield { done: false, visited: new Set(visited) };
+  }
+  yield { done: true, visited, path: null };
+}
+
+// ── Min Heap ──────────────────────────────────────────────────────────────────
+class MinHeap {
+  constructor(key) { this.data = []; this.key = key; }
+  push(item) {
+    this.data.push(item);
+    this._up(this.data.length - 1);
+  }
+  pop() {
+    const top = this.data[0];
+    const last = this.data.pop();
+    if (this.data.length) { this.data[0] = last; this._down(0); }
+    return top;
+  }
+  empty() { return this.data.length === 0; }
+  _up(i) {
+    while (i > 0) {
+      const p = (i-1)>>1;
+      if (this.key(this.data[p]) > this.key(this.data[i])) {
+        [this.data[p], this.data[i]] = [this.data[i], this.data[p]];
+        i = p;
+      } else break;
+    }
+  }
+  _down(i) {
+    const n = this.data.length;
+    while (true) {
+      let s = i, l = 2*i+1, r = 2*i+2;
+      if (l < n && this.key(this.data[l]) < this.key(this.data[s])) s = l;
+      if (r < n && this.key(this.data[r]) < this.key(this.data[s])) s = r;
+      if (s === i) break;
+      [this.data[s], this.data[i]] = [this.data[i], this.data[s]];
+      i = s;
+    }
+  }
+}
+
+// ── Run search ────────────────────────────────────────────────────────────────
+async function runSearch() {
+  if (isRunning) return;
+  if (!startCell) { toast('Place a start cell first'); return; }
+  if (!goalCell)  { toast('Place a goal cell first');  return; }
+
+  cancelFlag = false;
+  isRunning  = true;
+  document.getElementById('run-btn').disabled = true;
+
+  const algo = document.getElementById('algo-select').value;
+  const gens = { bfs: bfsGen, dfs: dfsGen, greedy: greedyGen, dijkstra: dijkstraGen, astar: astarGen, hillclimbing: hillClimbingGen };
+  const gen  = gens[algo](startCell.r, startCell.c);
+
+  let visitedCount = 0;
+
+  document.getElementById('stat-status').textContent = 'Running…';
+  document.getElementById('stat-visited').textContent = '—';
+  document.getElementById('stat-path').textContent    = '—';
+
+  // speed → ms delay per step (v=1 → ~119ms, v=100 → 0ms)
+  function delay() {
+    const v = +document.getElementById('speed-slider').value; // 1–100
+    return Math.max(0, Math.round(120 - v * 1.2));
+  }
+
+  async function step() {
+    if (cancelFlag) { finish(false); return; }
+
+    const { value } = await gen.next();
+    if (!value) { finish(false); return; }
+
+    if (value.done) {
+      if (value.path) {
+        drawGrid(value.visited, value.path);
+        document.getElementById('stat-status').textContent  = 'Found!';
+        document.getElementById('stat-visited').textContent = value.visited.size;
+        document.getElementById('stat-path').textContent    = value.path.length - 1 + ' steps';
+      } else {
+        drawGrid(value.visited, []);
+        document.getElementById('stat-status').textContent  = 'No path';
+        document.getElementById('stat-visited').textContent = value.visited.size;
+        document.getElementById('stat-path').textContent    = '—';
+      }
+      finish(true);
+      return;
+    }
+
+    visitedCount = value.visited.size;
+    drawGrid(value.visited, []);
+    document.getElementById('stat-visited').textContent = visitedCount;
+
+    const d = delay();
+    if (d === 0) {
+      pendingFrame = { type: 'raf', id: requestAnimationFrame(step) };
+    } else {
+      pendingFrame = { type: 'timeout', id: setTimeout(step, d) };
+    }
+  }
+
+  function finish(completed) {
+    pendingFrame = null;
+    isRunning = false;
+    cancelFlag = false;
+    document.getElementById('run-btn').disabled = false;
+    if (!completed) resetStats();
+  }
+
+  step();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── Default layout ────────────────────────────────────────────────────────────
+function loadDefaultLayout() {
+  initGrid();
+
+  // Outer rectangle: rows 2–14, cols 3–16
+  for (let c = 3; c <= 16; c++) { grid[3][c] = 'wall'; grid[14][c] = 'wall'; }
+  for (let r = 3; r <= 14; r++) { grid[r][3] = 'wall'; grid[r][16] = 'wall'; }
+
+  // Inner C-shape (opening faces left): top bar, right bar, bottom bar
+  for (let c = 9; c <= 13; c++)  grid[6][c]  = 'wall'; // top
+  for (let r = 6; r <= 11; r++)  grid[r][13] = 'wall'; // right
+  for (let c = 7; c <= 12; c++)  grid[11][c] = 'wall'; // bottom
+
+  startCell = {r: 11, c: 5};
+  goalCell  = {r: 5,  c: 14};
+  grid[startCell.r][startCell.c] = 'start';
+  grid[goalCell.r][goalCell.c]   = 'goal';
+}
+
+// ── Startup ───────────────────────────────────────────────────────────────────
+loadDefaultLayout();
+resizeCanvas();
+drawGrid();
+window.addEventListener('resize', () => { resizeCanvas(); drawGrid(); });
+</script>
+</body>
+</html>

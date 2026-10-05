@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Prolog — Prolog Playground</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Mini Prolog</h1>
+</header>
+
+<main class="layout">
+
+  <section class="panel program-panel">
+    <div class="panel-header">
+      <span>Knowledge Base</span>
+      <div class="panel-actions">
+        <select id="example-select">
+          <option value="">Load example…</option>
+          <option value="food">Food Culture</option>
+          <option value="family">Family Tree</option>
+        </select>
+      </div>
+    </div>
+    <textarea id="program" spellcheck="false" placeholder="% Write your Prolog facts and rules here, e.g.
+% italian(pizza).
+% spicy(X) :- indian(X)."></textarea>
+    <div id="consult-status" class="status"></div>
+  </section>
+
+  <section class="panel query-panel">
+    <div class="panel-header">
+      <span>Query</span>
+    </div>
+    <div class="query-row">
+      <span class="prompt">?-</span>
+      <input id="query" type="text" placeholder="likes(sam, pizza)" autocomplete="off">
+      <button id="query-run-btn" class="btn btn-primary">Run</button>
+    </div>
+    <div id="results" class="results"></div>
+  </section>
+
+</main>
+
+<footer class="credit">Powered by <a href="https://github.com/tau-prolog/tau-prolog" target="_blank" rel="noopener">Tau Prolog</a></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/tau-prolog@0.3.4/modules/core.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tau-prolog@0.3.4/modules/lists.js"></script>
+<script src="app.js?v=6"></script>
+</body>
+</html>

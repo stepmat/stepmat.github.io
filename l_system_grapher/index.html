@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L-System Grapher</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-family);
+      background: var(--color-bg-page);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--space-xl) 16px;
+      gap: var(--space-lg);
+    }
+
+    h1 {
+      font-size: var(--font-size-title);
+      font-weight: var(--font-weight-bold);
+      background: var(--gradient-title);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .layout {
+      display: flex;
+      gap: var(--space-xl);
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 1400px;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--color-bg-panel);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      min-width: 260px;
+    }
+
+    .panel h2 {
+      font-size: var(--font-size-label);
+      font-weight: var(--font-weight-semi);
+      text-transform: uppercase;
+      letter-spacing: var(--letter-spacing-label);
+      color: var(--color-text);
+    }
+
+    label {
+      display: block;
+      font-size: var(--font-size-sm);
+      color: var(--color-text);
+      margin-bottom: 4px;
+    }
+
+    /* ── Inputs ── */
+    input[type=text], input[type=number], select {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-input);
+      color: var(--color-text);
+      font-size: var(--font-size-ui);
+      font-family: var(--font-family);
+      outline: none;
+      transition: var(--transition-fast);
+    }
+    input[type=text]:focus, input[type=number]:focus, select:focus {
+      border-color: var(--color-primary);
+    }
+    input[type=text] { font-family: 'SFMono-Regular', Consolas, monospace; }
+
+    .field { display: flex; flex-direction: column; }
+
+    .rule-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rule-row .rule-pred { width: 56px; flex-shrink: 0; text-align: center; }
+    .rule-row span { color: var(--color-disabled-text); font-weight: var(--font-weight-semi); }
+
+    .hint {
+      font-size: var(--font-size-sm);
+      color: var(--color-text);
+    }
+    .hint-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .hint-list li::before {
+      content: "\2022";
+      margin-right: 6px;
+    }
+
+    .error-box {
+      list-style: none;
+      background: var(--color-danger-bg);
+      color: var(--color-danger-text);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      font-size: var(--font-size-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .error-box li::before {
+      content: "\26A0";
+      margin-right: 6px;
+    }
+
+    /* ── Examples ── */
+    .examples-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-sm);
+    }
+    .example-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border-radius: var(--radius-md);
+      border: 2px solid transparent;
+      background: var(--color-bg-input);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .example-card:hover { background: var(--color-bg-hover); }
+    .example-card.active {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+    }
+    .example-card canvas {
+      display: block;
+      background: #ffffff;
+      border-radius: 4px;
+      border: 1px solid var(--color-border);
+    }
+    .example-card span {
+      font-size: var(--font-size-sm);
+      text-align: center;
+      color: var(--color-text);
+      line-height: 1.2;
+    }
+
+    /* ── Speed / delay control ── */
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: var(--font-size-base);
+      color: var(--color-text);
+    }
+    .speed-row input[type=range] { flex: 1; accent-color: var(--color-accent); }
+
+    /* ── Action buttons ── */
+    .btn {
+      padding: 10px 16px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-size: var(--font-size-ui);
+      font-weight: var(--font-weight-semi);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      font-family: var(--font-family);
+    }
+    .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+    .btn-primary:hover { background: var(--color-primary-hover); }
+    .btn-primary:disabled { background: var(--color-disabled-bg); color: var(--color-disabled-text); cursor: not-allowed; }
+    .btn-secondary { background: var(--color-bg-hover); color: var(--color-text); }
+    .btn-secondary:hover { background: var(--color-bg-hover-dark); }
+    .btn-danger { background: var(--color-danger-bg); color: var(--color-danger-text); }
+    .btn-danger:hover { background: var(--color-danger-hover); }
+
+    .btn-row { display: flex; gap: var(--space-sm); }
+    .btn-row .btn { flex: 1; }
+
+    /* ── Stats ── */
+    .stats {
+      font-size: 0.82rem;
+      color: var(--color-text);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stats span { color: var(--color-text); }
+    .stats strong { color: var(--color-text); }
+
+    /* ── Canvas wrapper ── */
+    .canvas-wrap {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      flex-shrink: 0;
+      /* Never wider than the row: an over-wide centred item overflows on BOTH sides,
+         and the part past the left edge can't be scrolled to. */
+      max-width: 100%;
+      background: var(--color-bg-panel);
+    }
+    #canvas { display: block; max-width: 100%; height: auto; }
+
+  </style>
+</head>
+<body>
+
+<h1>L-System Grapher</h1>
+
+<div class="layout">
+  <!-- Left panel -->
+  <div class="panel" style="width:260px;">
+    <h2>Rules</h2>
+
+    <div class="field">
+      <label for="axiom">Axiom</label>
+      <input type="text" id="axiom" value="F">
+    </div>
+
+    <div class="rule-row">
+      <input type="text" class="rule-pred" id="rulePred1" value="F">
+      <span>&rarr;</span>
+      <input type="text" id="ruleSucc1" value="F[+F]F[-F]F">
+    </div>
+    <div class="rule-row">
+      <input type="text" class="rule-pred" id="rulePred2">
+      <span>&rarr;</span>
+      <input type="text" id="ruleSucc2">
+    </div>
+    <div class="rule-row">
+      <input type="text" class="rule-pred" id="rulePred3">
+      <span>&rarr;</span>
+      <input type="text" id="ruleSucc3">
+    </div>
+    <ul class="hint hint-list">
+      <li><strong>F</strong> = draw forward</li>
+      <li><strong>+</strong> / <strong>-</strong> = turn</li>
+      <li><strong>[</strong> / <strong>]</strong> = push/pop state</li>
+    </ul>
+
+    <h2>Parameters</h2>
+
+    <div class="field">
+      <label for="angle">Angle (degrees)</label>
+      <input type="number" id="angle" value="25" step="0.1">
+    </div>
+
+    <div class="field">
+      <label for="iterations">Iterations</label>
+      <input type="number" id="iterations" value="4" min="0" max="10" step="1">
+    </div>
+
+    <div class="field">
+      <label>Drawing Speed</label>
+      <div class="speed-row">
+        Slow
+        <input type="range" id="speed-slider" min="1" max="100" value="80">
+        Fast
+      </div>
+    </div>
+
+    <ul class="error-box" id="errorBox" style="display:none;"></ul>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="drawBtn" onclick="drawLSystem()">Draw</button>
+      <button class="btn btn-danger" id="stopBtn" onclick="stopDrawing()">Stop</button>
+    </div>
+
+    <h2>Stats</h2>
+    <div class="stats" id="stats">
+      <div><span>Status:</span> <strong id="stat-status">—</strong></div>
+      <div><span>Segments:</span> <strong id="stat-segments">—</strong></div>
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap">
+    <canvas id="canvas" width="700" height="700"></canvas>
+  </div>
+
+  <!-- Right panel -->
+  <div class="panel examples-panel" style="width:260px;">
+    <h2>Examples</h2>
+    <div class="examples-grid" id="examplesGrid"></div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let currentToken = 0;
+
+// Rules can grow exponentially (e.g. F -> FFFFFFFFFF over 10 iterations is 10^10
+// symbols), which would exhaust memory. Give up past this size instead.
+const MAX_SYMBOLS = 2000000;
+
+// returns null if the result would exceed MAX_SYMBOLS
+function expand(axiom, rules, iterations) {
+  let str = axiom;
+  for (let i = 0; i < iterations; i++) {
+    let next = '';
+    for (const ch of str) {
+      next += rules[ch] !== undefined ? rules[ch] : ch;
+      if (next.length > MAX_SYMBOLS) return null;
+    }
+    str = next;
+  }
+  return str;
+}
+
+function computeBounds(instructions, angleDeg) {
+  const angle = angleDeg * Math.PI / 180;
+  let x = 0, y = 0, heading = -Math.PI / 2;
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  const stack = [];
+  const stepLen = 10;
+  for (const ch of instructions) {
+    if (ch === 'F') {
+      x += Math.cos(heading) * stepLen;
+      y += Math.sin(heading) * stepLen;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    } else if (ch === '+') {
+      heading -= angle;
+    } else if (ch === '-') {
+      heading += angle;
+    } else if (ch === '[') {
+      stack.push({ x, y, heading });
+    } else if (ch === ']') {
+      const s = stack.pop();
+      if (s) { x = s.x; y = s.y; heading = s.heading; }
+    }
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+// speed slider (1-100) → ms delay per segment (1 → ~120ms, 100 → 0ms)
+function delayFromSpeed() {
+  const v = +document.getElementById('speed-slider').value;
+  return Math.max(0, Math.round(120 - v * 1.2));
+}
+
+async function draw(instructions, angleDeg, myToken) {
+  const angle = angleDeg * Math.PI / 180;
+  const bounds = computeBounds(instructions, angleDeg);
+  const w = bounds.maxX - bounds.minX || 1;
+  const h = bounds.maxY - bounds.minY || 1;
+  const padding = 30;
+  const scale = Math.min(
+    (canvas.width - padding * 2) / w,
+    (canvas.height - padding * 2) / h
+  );
+  const stepLen = 10 * scale;
+
+  const originX = (canvas.width - w * scale) / 2 - bounds.minX * scale;
+  // Centre on both axes. This used to pin the drawing to the top with `padding`,
+  // so a wide system (e.g. Koch) sat against the top edge with a large gap below,
+  // while the thumbnail previews centred the same shape correctly.
+  const originY = (canvas.height - h * scale) / 2 - bounds.minY * scale;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1.5;
+
+  let x = originX, y = originY, heading = -Math.PI / 2;
+  const stack = [];
+  let segments = 0;
+  const delay = delayFromSpeed();
+  const segmentsEl = document.getElementById('stat-segments');
+  let lastYield = performance.now();
+
+  for (const ch of instructions) {
+    if (currentToken !== myToken) return;
+    if (ch === 'F') {
+      const nx = x + Math.cos(heading) * stepLen;
+      const ny = y + Math.sin(heading) * stepLen;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(nx, ny);
+      ctx.stroke();
+      x = nx; y = ny;
+      segments++;
+      if (delay > 0) {
+        segmentsEl.textContent = segments;
+        await new Promise(r => setTimeout(r, delay));
+      } else if (performance.now() - lastYield > 30) {
+        // At full speed there is no delay, so still hand control back regularly:
+        // otherwise a large system freezes the page and Stop can't be clicked.
+        segmentsEl.textContent = segments;
+        await new Promise(r => setTimeout(r, 0));
+        lastYield = performance.now();
+      }
+    } else if (ch === '+') {
+      heading -= angle;
+    } else if (ch === '-') {
+      heading += angle;
+    } else if (ch === '[') {
+      stack.push({ x, y, heading });
+    } else if (ch === ']') {
+      const s = stack.pop();
+      if (s) { x = s.x; y = s.y; heading = s.heading; }
+    }
+  }
+  if (currentToken === myToken) {
+    segmentsEl.textContent = segments;
+    document.getElementById('stat-status').textContent = 'Done';
+  }
+}
+
+function buildRules() {
+  const rules = {};
+  for (const n of [1, 2, 3]) {
+    const pred = document.getElementById('rulePred' + n).value.trim();
+    const succ = document.getElementById('ruleSucc' + n).value.trim();
+    if (pred.length === 1) rules[pred] = succ;
+  }
+  return rules;
+}
+
+const SYMBOL_PATTERN = /^[A-Za-z+\-\[\]]*$/;
+
+function bracketsBalanced(s) {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === '[') depth++;
+    else if (ch === ']') {
+      depth--;
+      if (depth < 0) return false;
+    }
+  }
+  return depth === 0;
+}
+
+function validateInputs() {
+  const errors = [];
+  const axiom = document.getElementById('axiom').value.trim();
+  const angleRaw = document.getElementById('angle').value.trim();
+  const iterRaw = document.getElementById('iterations').value.trim();
+
+  if (!axiom) {
+    errors.push('Axiom cannot be empty.');
+  } else {
+    if (!SYMBOL_PATTERN.test(axiom)) {
+      errors.push('Axiom contains invalid characters (only letters, +, -, [, ] are allowed).');
+    }
+    if (!bracketsBalanced(axiom)) {
+      errors.push('Axiom has unbalanced [ ] brackets.');
+    }
+  }
+
+  const seenPred = new Set();
+  for (const n of [1, 2, 3]) {
+    const pred = document.getElementById('rulePred' + n).value.trim();
+    const succ = document.getElementById('ruleSucc' + n).value.trim();
+    if (!pred && !succ) continue;
+
+    if (!pred) {
+      errors.push(`Rule ${n}: a successor was entered but no predecessor letter was given.`);
+      continue;
+    }
+    if (!/^[A-Za-z]$/.test(pred)) {
+      errors.push(`Rule ${n}: predecessor "${pred}" must be a single letter.`);
+      continue;
+    }
+    if (seenPred.has(pred)) {
+      errors.push(`Rule ${n}: predecessor "${pred}" is already defined by another rule.`);
+    }
+    seenPred.add(pred);
+
+    if (succ && !SYMBOL_PATTERN.test(succ)) {
+      errors.push(`Rule ${n} (${pred} → ...): successor contains invalid characters (only letters, +, -, [, ] are allowed).`);
+    }
+    if (succ && !bracketsBalanced(succ)) {
+      errors.push(`Rule ${n} (${pred} → ...): successor has unbalanced [ ] brackets.`);
+    }
+  }
+
+  if (angleRaw === '' || isNaN(parseFloat(angleRaw))) {
+    errors.push('Angle must be a number.');
+  }
+
+  if (iterRaw === '' || !/^\d+$/.test(iterRaw) || +iterRaw < 0 || +iterRaw > 10) {
+    errors.push('Iterations must be a whole number between 0 and 10.');
+  }
+
+  return errors;
+}
+
+function showErrors(errors) {
+  const box = document.getElementById('errorBox');
+  box.innerHTML = errors.map(e => `<li>${e}</li>`).join('');
+  box.style.display = 'flex';
+}
+
+function clearErrors() {
+  const box = document.getElementById('errorBox');
+  box.style.display = 'none';
+  box.innerHTML = '';
+}
+
+function drawLSystem() {
+  const errors = validateInputs();
+  if (errors.length) {
+    showErrors(errors);
+    return;
+  }
+  clearErrors();
+
+  const axiom = document.getElementById('axiom').value.trim();
+  const rules = buildRules();
+  const angle = parseFloat(document.getElementById('angle').value);
+  const iterations = parseInt(document.getElementById('iterations').value);
+
+  const instructions = expand(axiom, rules, iterations);
+  if (instructions === null) {
+    showErrors([`These rules grow too quickly: ${iterations} iterations would produce more than ` +
+      `${MAX_SYMBOLS.toLocaleString()} symbols. Try fewer iterations.`]);
+    return;
+  }
+  const myToken = ++currentToken;
+  document.getElementById('stat-status').textContent = 'Running…';
+  document.getElementById('stat-segments').textContent = '0';
+  draw(instructions, angle, myToken);
+}
+
+function stopDrawing() {
+  currentToken++;
+  document.getElementById('stat-status').textContent = 'Stopped';
+}
+
+// ── Presets ───────────────────────────────────────────────────────────────────
+const PRESETS = [
+  { name: 'Plant A',    axiom: 'F', rules: [['F', 'F[+F]F[-F]F'],           ['', ''], ['', '']], angle: 25.7, iterations: 5, previewIterations: 4 },
+  { name: 'Plant B',    axiom: 'F', rules: [['F', 'F[+F]F[-F][F]'],         ['', ''], ['', '']], angle: 20,   iterations: 5, previewIterations: 4 },
+  { name: 'Plant C',    axiom: 'F', rules: [['F', 'FF-[-F+F+F]+[+F-F-F]'],  ['', ''], ['', '']], angle: 22.5, iterations: 4, previewIterations: 3 },
+  { name: 'Plant D',    axiom: 'X', rules: [['X', 'F[+X]F[-X]+X'],          ['F', 'FF'], ['', '']], angle: 20,   iterations: 7, previewIterations: 5 },
+  { name: 'Plant E',    axiom: 'X', rules: [['X', 'F[+X][-X]FX'],           ['F', 'FF'], ['', '']], angle: 25.7, iterations: 7, previewIterations: 5 },
+  { name: 'Plant F',    axiom: 'X', rules: [['X', 'F-[[X]+X]+F[+FX]-X'],    ['F', 'FF'], ['', '']], angle: 22.5, iterations: 5, previewIterations: 4 },
+  { name: 'Koch Snowflake', axiom: 'F++F++F', rules: [['F', 'F-F++F-F'],    ['', ''], ['', '']], angle: 60,   iterations: 4, previewIterations: 3 },
+  { name: 'Sierpinski Arrowhead', axiom: 'XF', rules: [['X', 'YF+XF+Y'],    ['Y', 'XF-YF-X'], ['', '']], angle: 60, iterations: 6, previewIterations: 5 },
+  { name: 'Dragon Curve', axiom: 'FX', rules: [['X', 'X+YF+'],              ['Y', '-FX-Y'], ['', '']], angle: 90, iterations: 10, previewIterations: 8 },
+  { name: 'Hilbert Curve', axiom: 'A', rules: [['A', '-BF+AFA+FB-'],        ['B', '+AF-BFB-FA+'], ['', '']], angle: 90, iterations: 5, previewIterations: 4 },
+];
+
+function renderPreview(canvasEl, preset) {
+  const rulesObj = {};
+  preset.rules.forEach(([p, s]) => { if (p) rulesObj[p] = s; });
+  const instructions = expand(preset.axiom, rulesObj, preset.previewIterations);
+  if (instructions === null) return;
+  const angleRad = preset.angle * Math.PI / 180;
+  const bounds = computeBounds(instructions, preset.angle);
+  const w = bounds.maxX - bounds.minX || 1;
+  const h = bounds.maxY - bounds.minY || 1;
+  const pad = 4;
+  const cw = canvasEl.width, ch = canvasEl.height;
+  const scale = Math.min((cw - pad * 2) / w, (ch - pad * 2) / h);
+  const stepLen = 10 * scale;
+  const originX = (cw - w * scale) / 2 - bounds.minX * scale;
+  const originY = (ch - h * scale) / 2 - bounds.minY * scale;
+
+  const pctx = canvasEl.getContext('2d');
+  pctx.clearRect(0, 0, cw, ch);
+  pctx.strokeStyle = '#000000';
+  pctx.lineWidth = 1;
+
+  let x = originX, y = originY, heading = -Math.PI / 2;
+  const stack = [];
+  for (const sym of instructions) {
+    if (sym === 'F') {
+      const nx = x + Math.cos(heading) * stepLen;
+      const ny = y + Math.sin(heading) * stepLen;
+      pctx.beginPath();
+      pctx.moveTo(x, y);
+      pctx.lineTo(nx, ny);
+      pctx.stroke();
+      x = nx; y = ny;
+    } else if (sym === '+') {
+      heading -= angleRad;
+    } else if (sym === '-') {
+      heading += angleRad;
+    } else if (sym === '[') {
+      stack.push({ x, y, heading });
+    } else if (sym === ']') {
+      const s = stack.pop();
+      if (s) { x = s.x; y = s.y; heading = s.heading; }
+    }
+  }
+}
+
+function applyPreset(preset, cardEl) {
+  document.getElementById('axiom').value = preset.axiom;
+  for (const n of [1, 2, 3]) {
+    const [p, s] = preset.rules[n - 1] || ['', ''];
+    document.getElementById('rulePred' + n).value = p;
+    document.getElementById('ruleSucc' + n).value = s;
+  }
+  document.getElementById('angle').value = preset.angle;
+  document.getElementById('iterations').value = preset.iterations;
+
+  document.querySelectorAll('.example-card').forEach(el => el.classList.remove('active'));
+  if (cardEl) cardEl.classList.add('active');
+
+  drawLSystem();
+}
+
+function buildExamplesGrid() {
+  const grid = document.getElementById('examplesGrid');
+  PRESETS.forEach(preset => {
+    const card = document.createElement('div');
+    card.className = 'example-card';
+
+    const cv = document.createElement('canvas');
+    cv.width = 80;
+    cv.height = 80;
+
+    const label = document.createElement('span');
+    label.textContent = preset.name;
+
+    card.appendChild(cv);
+    card.appendChild(label);
+    card.addEventListener('click', () => applyPreset(preset, card));
+    grid.appendChild(card);
+
+    renderPreview(cv, preset);
+  });
+}
+
+buildExamplesGrid();
+</script>
+
+</body>
+</html>

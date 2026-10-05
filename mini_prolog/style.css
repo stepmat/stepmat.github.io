@@ -1,0 +1,253 @@
+:root {
+  /* ── Colour: surfaces ── */
+  --color-bg-page:        #f1f5f9;
+  --color-bg-panel:       #ffffff;
+  --color-bg-input:       #f8fafc;
+  --color-bg-hover:       #e2e8f0;
+  --color-bg-hover-dark:  #cbd5e1;
+
+  /* ── Colour: borders ── */
+  --color-border:         #cbd5e1;
+
+  /* ── Colour: text ── */
+  --color-text:           #000000;
+  --color-text-muted:     #64748b;
+  --color-text-inverse:   #f8fafc;
+
+  /* ── Colour: brand ── */
+  --color-primary:        #2563eb;
+  --color-primary-hover:  #1d4ed8;
+  --color-primary-text:   #1d4ed8;
+
+  /* ── Colour: semantic ── */
+  --color-success:        #16a34a;
+  --color-success-bg:     #f0fdf4;
+  --color-danger-bg:      #fee2e2;
+  --color-danger-text:    #b91c1c;
+
+  /* ── Typography ── */
+  --font-family:          system-ui, sans-serif;
+  --font-mono:            "Consolas", "Menlo", "Monaco", "Courier New", monospace;
+  --font-size-sm:         0.78rem;
+  --font-size-base:       0.88rem;
+  --font-size-ui:         0.9rem;
+  --font-size-label:      0.85rem;
+  --font-size-title:      1.8rem;
+  --font-weight-semi:     600;
+  --font-weight-bold:     700;
+  --letter-spacing-label: 0.08em;
+
+  /* ── Title gradient ── */
+  --gradient-title:       linear-gradient(135deg, #2563eb, #7c3aed);
+
+  /* ── Spacing ── */
+  --space-xs:   6px;
+  --space-sm:   8px;
+  --space-md:   16px;
+  --space-lg:   20px;
+  --space-xl:   24px;
+
+  /* ── Border radius ── */
+  --radius-md:  8px;
+  --radius-lg:  12px;
+
+  /* ── Transitions ── */
+  --transition-fast: all 0.15s;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl) 16px;
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-bg-page);
+}
+
+/* ── Header ── */
+.app-header {
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  background: var(--gradient-title);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Layout: the two panels fill the space between header and footer ── */
+.layout {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 420px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--space-xl);
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  #program { min-height: 260px; }
+  .results { min-height: 200px; }
+}
+
+/* ── Panel ── */
+.panel {
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 14px var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-label);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* ── Controls ── */
+#example-select {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+#example-select:hover { background: var(--color-bg-hover); }
+#example-select:focus { outline: none; border-color: var(--color-primary); }
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semi);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.btn-primary:hover { background: var(--color-primary-hover); }
+.btn-primary:disabled { background: var(--color-bg-hover); color: var(--color-text-muted); cursor: not-allowed; }
+
+/* ── Knowledge base editor ── */
+#program {
+  flex: 1;
+  width: 100%;
+  border: none;
+  resize: none;
+  padding: var(--space-md) var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg-panel);
+  outline: none;
+  tab-size: 4;
+}
+
+.status {
+  min-height: 16px;
+  padding: var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.status.ok  { color: var(--color-success); background: var(--color-success-bg); }
+.status.err { color: var(--color-danger-text); background: var(--color-danger-bg); }
+
+/* ── Query ── */
+.query-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 14px var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.prompt {
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-text);
+}
+
+#query {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  transition: var(--transition-fast);
+}
+
+#query:focus { outline: none; border-color: var(--color-primary); }
+
+.results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.answer {
+  padding: var(--space-xs) 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.answer.true  { color: var(--color-success); }
+.answer.false { color: var(--color-danger-text); }
+.answer.info  { color: var(--color-text-muted); font-style: italic; }
+.answer.error { color: var(--color-danger-text); }
+
+/* ── Footer ── */
+.credit {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.credit a { color: var(--color-primary); }

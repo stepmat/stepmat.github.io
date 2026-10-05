@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yavalath vs AI</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  #board-wrap { position: relative; display: inline-block; }
+  #board-svg { display: block; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-panel); }
+  .hex-cell { cursor: pointer; transition: opacity 0.1s; }
+  .hex-cell:hover { opacity: 0.75; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">← Games</a>
+  <h1>⬡ Yavalath</h1>
+</div>
+<div class="main">
+  <div id="board-wrap">
+    <svg id="board-svg"></svg>
+  </div>
+  <div id="sidebar" class="sidebar"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// ─── Board Definition ─────────────────────────────────────────────────────────
+// Hexagonal board, size 5 (5 cells per side, 61 total).
+// Axial coordinates: q, r. Valid cells: |q| <= N-1, |r| <= N-1, |q+r| <= N-1.
+
+const N = 5;
+const ALL_CELLS = [];
+for (let q = -(N-1); q <= N-1; q++)
+  for (let r = -(N-1); r <= N-1; r++)
+    if (Math.abs(q + r) <= N - 1)
+      ALL_CELLS.push(`${q},${r}`);
+
+const CORNER_CELLS = new Set([
+  `${N-1},0`, `0,${N-1}`, `${-(N-1)},${N-1}`,
+  `${-(N-1)},0`, `0,${-(N-1)}`, `${N-1},${-(N-1)}`,
+]);
+const BORDER_CELLS = new Set(
+  ALL_CELLS.filter(k => {
+    const [q, r] = k.split(',').map(Number);
+    return Math.max(Math.abs(q), Math.abs(r), Math.abs(q+r)) === N-1;
+  })
+);
+
+function emptyBoard() {
+  const b = {};
+  for (const k of ALL_CELLS) b[k] = null;
+  return b;
+}
+
+// ─── Geometry ─────────────────────────────────────────────────────────────────
+
+const HEX_R = 26;          // circumradius
+const SVG_W = 480, SVG_H = 420;
+const CX = SVG_W / 2, CY = SVG_H / 2;
+
+function hexPixel(q, r) {
+  return {
+    x: CX + HEX_R * Math.sqrt(3) * (q + r / 2),
+    y: CY + HEX_R * 1.5 * r,
+  };
+}
+
+function hexPoints(cx, cy, r) {
+  return Array.from({length: 6}, (_, i) => {
+    const a = Math.PI / 3 * i - Math.PI / 6;
+    return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`;
+  }).join(' ');
+}
+
+// ─── Game Logic ───────────────────────────────────────────────────────────────
+
+const LINE_DIRS = [[1,0],[0,1],[1,-1]]; // 3 axes (each covers both directions)
+
+function runLength(board, q, r, dq, dr, player) {
+  let n = 1;
+  let [nq, nr] = [q + dq, r + dr];
+  while (board[`${nq},${nr}`] === player) { n++; nq += dq; nr += dr; }
+  [nq, nr] = [q - dq, r - dr];
+  while (board[`${nq},${nr}`] === player) { n++; nq -= dq; nr -= dr; }
+  return n;
+}
+
+// After placing at (q,r), check if the result is a win, a loss, or neutral.
+// Win: 4+ in a row. Loss: exactly 3 in a row (with no 4+).
+function checkPlacement(board, q, r, player) {
+  let win = false, lose = false;
+  for (const [dq, dr] of LINE_DIRS) {
+    const run = runLength(board, q, r, dq, dr, player);
+    if (run >= 4) win = true;
+    else if (run === 3) lose = true;
+  }
+  if (win) return 'win';
+  if (lose) return 'lose';
+  return null;
+}
+
+function legalMoves(board) {
+  return ALL_CELLS.filter(k => board[k] === null);
+}
+
+function applyMove(board, move, player) {
+  return {...board, [move]: player};
+}
+
+// ─── Heuristics ───────────────────────────────────────────────────────────────
+
+function parsePW(id, def) {
+  const v = parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? def : v;
+}
+
+function getHeuristicWeights() {
+  return {
+    line:     parsePW('hw-line', 0),
+    center:   parsePW('hw-center', 0),
+    corner:   parsePW('hw-corner', 0),
+    sides:    parsePW('hw-sides', 0),
+    mobility: parsePW('hw-mobility', 0),
+  };
+}
+
+function hLineCompletion(board, player) {
+  let score = 0;
+  for (const [dq, dr] of LINE_DIRS) {
+    for (const k of ALL_CELLS) {
+      const [q, r] = k.split(',').map(Number);
+      if (board[`${q - dq},${r - dr}`] === player) continue;
+      let run = 0, nq = q, nr = r;
+      while (board[`${nq},${nr}`] === player) { run++; nq += dq; nr += dr; }
+      score += run * run;
+    }
+  }
+  return score;
+}
+
+function hCenterProximity(board, player) {
+  let score = 0;
+  for (const k of ALL_CELLS) {
+    if (board[k] !== player) continue;
+    const [q, r] = k.split(',').map(Number);
+    const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+    score += 1 - dist / (N - 1);
+  }
+  return score;
+}
+
+function hCornerProximity(board, player) {
+  const maxD = N - 1; // max achievable hex-distance to nearest corner (at the center)
+  let score = 0;
+  for (const k of ALL_CELLS) {
+    if (board[k] !== player) continue;
+    const [q, r] = k.split(',').map(Number);
+    const minD = Math.min(...[...CORNER_CELLS].map(ck => {
+      const [cq, cr] = ck.split(',').map(Number);
+      const dq = q - cq, dr = r - cr;
+      return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr));
+    }));
+    score += 1 - minD / maxD;
+  }
+  return score;
+}
+
+function hSidesProximity(board, player) {
+  const maxD = N - 1;
+  let score = 0;
+  for (const k of ALL_CELLS) {
+    if (board[k] !== player) continue;
+    const [q, r] = k.split(',').map(Number);
+    const distFromCenter = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+    const d = (N - 1) - distFromCenter; // 0 = on border, N-1 = center
+    score += (maxD - d) / maxD;
+  }
+  return score;
+}
+
+function hMobility(board, player) {
+  return legalMoves(board).length - legalMoves(board).length; // same pool; always 0
+}
+
+function evaluateBoard(board) {
+  const hw = getHeuristicWeights();
+  let score = 0;
+  if (hw.line)     score += hw.line     * (hLineCompletion(board,'X') - hLineCompletion(board,'O'));
+  if (hw.center)   score += hw.center   * (hCenterProximity(board,'X') - hCenterProximity(board,'O'));
+  if (hw.corner)   score += hw.corner   * (hCornerProximity(board,'X') - hCornerProximity(board,'O'));
+  if (hw.sides)    score += hw.sides    * (hSidesProximity(board,'X') - hSidesProximity(board,'O'));
+  if (hw.mobility) score += hw.mobility * hMobility(board,'X');
+  return score;
+}
+
+// ─── Game Object ─────────────────────────────────────────────────────────────
+
+const yavGame = {
+  moves(s)        { return s.winner ? [] : legalMoves(s.board); },
+  apply(s, m) {
+    const board = applyMove(s.board, m, s.turn);
+    const [q, r] = m.split(',').map(Number);
+    const result = checkPlacement(board, q, r, s.turn);
+    const winner = result === 'win' ? s.turn
+                 : result === 'lose' ? (s.turn === 'X' ? 'O' : 'X')
+                 : null;
+    return {board, turn: s.turn === 'X' ? 'O' : 'X', winner, lastMove: m, lastPlayer: s.turn};
+  },
+  evaluate(s) {
+    if (s.winner === 'X') return 1000;
+    if (s.winner === 'O') return -1000;
+    if (legalMoves(s.board).length === 0) return 0;
+    return evaluateBoard(s.board);
+  },
+  isMaximizing(s) { return s.turn === 'X'; },
+  isTerminal(s)   { return !!s.winner || legalMoves(s.board).length === 0; },
+  simulate(s) {
+    let cur = s;
+    while (!yavGame.isTerminal(cur)) {
+      const mvs = legalMoves(cur.board);
+      cur = yavGame.apply(cur, mvs[Math.floor(Math.random() * mvs.length)]);
+    }
+    return cur.winner === 'O' ? 1 : cur.winner === 'X' ? 0 : 0.5;
+  },
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+const state = {
+  board: emptyBoard(),
+  turn: 'X',
+  winner: null,
+  lastMove: null,
+  lastPlayer: null,
+  gameOver: false,
+  aiArrowData: null,
+};
+
+function getState() { return {board: state.board, turn: state.turn, winner: state.winner, lastMove: state.lastMove, lastPlayer: state.lastPlayer}; }
+
+// ─── Rendering ───────────────────────────────────────────────────────────────
+
+function render() {
+  const svg = document.getElementById('board-svg');
+  svg.setAttribute('width', SVG_W); svg.setAttribute('height', SVG_H);
+  svg.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+  svg.innerHTML = '';
+
+  for (const k of ALL_CELLS) {
+    const [q, r] = k.split(',').map(Number);
+    const {x, y} = hexPixel(q, r);
+    const cell = state.board[k];
+    const pts = hexPoints(x, y, HEX_R - 1.5);
+
+    const fill = cell === 'X' ? '#fff' :
+                 cell === 'O' ? '#111' :
+                 '#e2e8f0';
+
+    const hex = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    hex.setAttribute('points', pts);
+    hex.setAttribute('fill', fill);
+    hex.setAttribute('stroke', '#94a3b8');
+    hex.setAttribute('stroke-width', k === state.lastMove ? '2.5' : '1.5');
+    if (k === state.lastMove)
+      hex.setAttribute('stroke', '#2563eb');
+
+    if (!cell && !state.gameOver) {
+      hex.classList.add('hex-cell');
+      hex.addEventListener('click', () => handleClick(k));
+    }
+    svg.appendChild(hex);
+
+    // AI evaluation dot (covers the just-played cell too, like other games)
+    if (state.aiArrowData && showAIHints()) {
+      const ad = state.aiArrowData.find(d => d.move === k);
+      if (ad) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+        dot.setAttribute('r', Math.max(5, ad.width * 1.1).toFixed(1));
+        dot.setAttribute('fill', valueToColor(ad.value));
+        dot.setAttribute('opacity', '0.8');
+        dot.setAttribute('pointer-events', 'none');
+        svg.appendChild(dot);
+      }
+    }
+
+  }
+}
+
+function updateScorePanel() {
+  const panel = document.getElementById('score-panel');
+  if (!isMinimaxActive()) { panel.style.display='none'; return; }
+  panel.style.display = 'block';
+
+  const board = state.board, hw = getHeuristicWeights();
+  const sections = [];
+
+  for (const [player, sign, name] of [['X', 1, 'White'], ['O', -1, 'Black']]) {
+    if (getPlayerType(player) !== 'minimax') continue;
+    const fmt = v => (sign * v).toFixed(2);
+    const lines = [];
+    if (state.winner === 'X') lines.push('Game over: White wins!');
+    else if (state.winner === 'O') lines.push('Game over: Black wins!');
+    if (hw.line)     { const v = hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O')); lines.push(`Line Completion (×${hw.line}): ${fmt(v)}`); }
+    if (hw.center)   { const v = hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O')); lines.push(`Center Proximity (×${hw.center}): ${fmt(v)}`); }
+    if (hw.corner)   { const v = hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O')); lines.push(`Corner Proximity (×${hw.corner}): ${fmt(v)}`); }
+    if (hw.sides)    { const v = hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O')); lines.push(`Sides Proximity (×${hw.sides}): ${fmt(v)}`); }
+    if (hw.mobility) { const v = hw.mobility*hMobility(board,'X'); lines.push(`Mobility (×${hw.mobility}): ${fmt(v)}`); }
+    if (!lines.length) lines.push('No heuristics active');
+    else if (!state.winner) {
+      const total = lines.reduce((acc, l) => { const m = l.match(/: ([-\d.]+)/); return acc+(m?parseFloat(m[1]):0); }, 0);
+      lines.push('─────────────', `Total: ${total.toFixed(2)}`);
+    }
+    lines.push(`<span style="color:var(--color-text-muted);font-size:0.78rem">positive = good for ${name}</span>`);
+    sections.push(`<b style="color:var(--color-text-muted);font-family:var(--font-family);font-size:0.82rem">${name}</b><br>`+lines.join('<br>'));
+  }
+  document.getElementById('score-breakdown').innerHTML = sections.join('<br><br>');
+}
+
+// ─── Interaction ─────────────────────────────────────────────────────────────
+
+function triggerNextPlayer() {
+  if (state.gameOver) return;
+  const type = getPlayerType(state.turn);
+  const name = state.turn === 'X' ? 'White' : 'Black';
+  const sb = document.getElementById('status-box');
+  if (type === 'human') { sb.textContent = `${name}'s turn`; return; }
+  sb.textContent = `${name} thinking...`;
+  runAI(yavGame, getState(), ({move, arrowData}) => {
+    state.aiArrowData = arrowData;
+    if (move === null) return;
+    const [q, r] = move.split(',').map(Number);
+    state.board = applyMove(state.board, move, state.turn);
+    const result = checkPlacement(state.board, q, r, state.turn);
+    const winner = result === 'win' ? state.turn
+                 : result === 'lose' ? (state.turn === 'X' ? 'O' : 'X')
+                 : null;
+    state.lastMove = move; state.lastPlayer = state.turn;
+    state.turn = state.turn === 'X' ? 'O' : 'X';
+    render(); updateScorePanel();
+    if (winner) { endGame(winner); return; }
+    if (!legalMoves(state.board).length) { endDraw(); return; }
+    triggerNextPlayer();
+  });
+}
+
+function handleClick(k) {
+  if (state.gameOver || state.board[k] !== null) return;
+  if (getPlayerType(state.turn) !== 'human') return;
+  state.aiArrowData = null;
+  const [q, r] = k.split(',').map(Number);
+  state.board = applyMove(state.board, k, state.turn);
+  const result = checkPlacement(state.board, q, r, state.turn);
+  const winner = result === 'win' ? state.turn
+               : result === 'lose' ? (state.turn === 'X' ? 'O' : 'X')
+               : null;
+  state.lastMove = k; state.lastPlayer = state.turn;
+  state.turn = state.turn === 'X' ? 'O' : 'X';
+  render(); updateScorePanel();
+  if (winner) { endGame(winner); return; }
+  if (!legalMoves(state.board).length) { endDraw(); return; }
+  triggerNextPlayer();
+}
+
+function endGame(winner) {
+  state.gameOver = true; state.winner = winner;
+  document.getElementById('status-box').textContent =
+    winner === 'X' ? 'White wins!' : 'Black wins!';
+  render(); updateScorePanel();
+}
+
+function endDraw() {
+  state.gameOver = true;
+  document.getElementById('status-box').textContent = 'Draw!';
+  render(); updateScorePanel();
+}
+
+function newGame() {
+  state.board = emptyBoard(); state.turn = 'X';
+  state.winner = null; state.lastMove = null; state.lastPlayer = null;
+  state.gameOver = false; state.aiArrowData = null;
+  render(); updateScorePanel();
+  document.getElementById('thinking').textContent = '';
+  triggerNextPlayer();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+const yavExtraSettings = `
+  <hr style="border-color:var(--color-border); margin:8px 0;">
+  <div style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:8px;">Heuristic Weights <span style="font-size:0.75rem;">(0 = off)</span></div>
+  <div class="piece-weight-row"><span data-tooltip="Scans all hex lines and sums run² for each consecutive run of the player's pieces. A run of 2 = 4 pts, run of 3 = 9 pts. Longer runs score exponentially more.">Line Completion</span><input type="number" id="hw-line" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/(N−1), where d is the hex Chebyshev distance to the board centre: max(|q|, |r|, |q+r|) in axial coordinates. Centre = 1, outer ring = 0.">Center Proximity</span><input type="number" id="hw-center" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − minD/maxD, where minD is the minimum hex distance to any of the 6 corner cells and maxD is the maximum possible such distance.">Corner Proximity</span><input type="number" id="hw-corner" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores distFromCenter/(N−1) using hex Chebyshev distance. Border pieces (outer ring) score 1, the centre scores 0.">Sides Proximity</span><input type="number" id="hw-sides" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's legal move count minus the opponent's. Always 0 in placement games where both players share the same pool of empty cells.">Mobility</span><input type="number" id="hw-mobility" value="0" min="0" step="1"></div>
+`;
+
+buildSidebar({
+  extraSettings: yavExtraSettings,
+  mmDepthMax: 5, mmDepthDefault: 3,
+  uctSimsMax: 5000, uctSimsDefault: 1000,
+  p1Label: 'White',
+  p2Label: 'Black',
+  extraPanels: `<div class="panel"><h3>Rules</h3><div style="font-size:0.82rem;color:var(--color-text-muted);line-height:1.6;">
+    <b>Board:</b> Size-5 hexagonal board (61 cells).<br>
+    <b>Play:</b> Players alternate placing a stone on any empty cell.<br>
+    <b>Win:</b> Get 4 or more of your stones in a row along any hex line.<br>
+    <b>Lose:</b> Get exactly 3 of your stones in a row (unless it simultaneously creates a 4-in-a-row).<br>
+    <b>Draw:</b> If the board fills with no winner, the game is a draw.
+  </div></div>`,
+});
+
+setupSharedUI({
+  onAlgoChange: () => updateScorePanel(),
+  onNewGame: newGame,
+  onRender: render,
+  onPlayerChange: triggerNextPlayer,
+});
+
+newGame();
+</script>
+</body>
+</html>

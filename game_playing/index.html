@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Playing AI</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { justify-content: center; padding: 40px 20px; }
+  h1 { font-size: 2rem; letter-spacing: 2px; margin-bottom: 8px; }
+  p { color: var(--color-text-muted); margin-bottom: 40px; font-size: 0.95rem; }
+  .games { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .game-card {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 32px 28px;
+    width: 200px;
+    text-align: center;
+    text-decoration: none;
+    color: var(--color-text);
+    transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+  }
+  .game-card:hover { border-color: var(--color-primary); transform: translateY(-3px); box-shadow: 0 6px 16px rgba(37,99,235,0.15); }
+  .game-card .icon { font-size: 52px; margin-bottom: 14px; }
+  .game-card .name { font-size: 1.1rem; font-weight: bold; color: var(--color-primary-text); margin-bottom: 6px; }
+  .game-card .desc { font-size: 0.82rem; color: var(--color-text-muted); line-height: 1.4; }
+</style>
+</head>
+<body>
+  <h1>Game Playing AI</h1>
+  <p>Choose a game to play against the AI</p>
+  <div class="games">
+    <a class="game-card" href="chess.html">
+      <div class="icon">♟</div>
+      <div class="name">Chess</div>
+      <div class="desc">8×8 board, move pieces by their rules, checkmate the opponent's king to win</div>
+    </a>
+    <a class="game-card" href="tictactoe.html">
+      <div class="icon">✕</div>
+      <div class="name">Tic Tac Toe</div>
+      <div class="desc">3×3 board, place pieces in turns, first to get 3 in a row wins</div>
+    </a>
+    <a class="game-card" href="gomoku.html">
+      <div class="icon">⬟</div>
+      <div class="name">Gomoku</div>
+      <div class="desc">9×9 board, place stones in turns, first to get 5 in a row wins</div>
+    </a>
+    <a class="game-card" href="reversi.html">
+      <div class="icon">⬤</div>
+      <div class="name">Reversi</div>
+      <div class="desc">8×8 board, place pieces to flip opponent's, most pieces when full wins</div>
+    </a>
+    <a class="game-card" href="hex.html">
+      <div class="icon">◆</div>
+      <div class="name">Hex</div>
+      <div class="desc">11×11 board, place pieces in turns, first to connect your two sides wins</div>
+    </a>
+    <a class="game-card" href="alquerque.html">
+      <div class="icon">◉</div>
+      <div class="name">Alquerque</div>
+      <div class="desc">5×5 board, move and capture by jumping, eliminate all opponent pieces to win</div>
+    </a>
+    <a class="game-card" href="draughts.html">
+      <div class="icon">⛀</div>
+      <div class="name">Draughts</div>
+      <div class="desc">8×8 board, move diagonally and capture by jumping, eliminate all opponent pieces to win</div>
+    </a>
+    <a class="game-card" href="yavalath.html">
+      <div class="icon">⬡</div>
+      <div class="name">Yavalath</div>
+      <div class="desc">Size-5 hex board, place stones in turns, 4-in-a-row wins but 3-in-a-row loses</div>
+    </a>
+  </div>
+</body>
+</html>

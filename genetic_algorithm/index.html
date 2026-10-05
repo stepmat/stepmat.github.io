@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Genetic Knapsack</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-family);
+    background: var(--color-bg-page);
+    color: var(--color-text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-xl) 16px;
+    gap: var(--space-lg);
+  }
+
+  h1 {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+    background: var(--gradient-title);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-sub { font-size: var(--font-size-base); color: var(--color-text-muted); text-align: center; }
+  .header-credit { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+  .header-credit a { color: var(--color-primary); text-decoration: none; }
+  .header-credit a:hover { text-decoration: underline; }
+
+  .container {
+    max-width: 1100px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  /* ── Panel (matches maze_solver .panel) ── */
+  .panel {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .panel h2 {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    color: var(--color-text);
+  }
+
+  .row { display: flex; gap: var(--space-xl); flex-wrap: wrap; align-items: stretch; }
+  .row > .flex-1 { flex: 1 1 320px; }
+
+  .field-row { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+  .field { flex: 1 1 140px; display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+  }
+  .field input {
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    color: var(--color-text);
+    font-size: var(--font-size-ui);
+    outline: none;
+  }
+  .field input:focus { border-color: var(--color-primary); }
+
+  .btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: var(--font-size-ui);
+    font-weight: var(--font-weight-semi);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    width: 100%;
+  }
+  .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+  .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+  .btn-primary:disabled { background: var(--color-disabled-bg); color: var(--color-disabled-text); cursor: not-allowed; }
+  .btn-secondary { background: var(--color-bg-hover); color: var(--color-text); }
+  .btn-secondary:hover:not(:disabled) { background: var(--color-bg-hover-dark); }
+  .btn-secondary:disabled { color: var(--color-text-muted); cursor: not-allowed; opacity: 0.6; }
+
+  .items-wrap { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+  .item-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+    border-radius: var(--radius-md);
+    padding: var(--space-xs) 8px;
+    min-width: 52px;
+  }
+  .item-chip .value { font-weight: var(--font-weight-bold); }
+  .divider { margin: var(--space-md) 0; border-bottom: 1px solid var(--color-border); }
+
+  .results-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  .results-title {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text);
+    text-align: center;
+  }
+
+  .best-line { margin-bottom: 4px; font-size: var(--font-size-base); }
+  .best-line .label {
+    display: inline-block;
+    width: 160px;
+    font-weight: var(--font-weight-semi);
+    text-align: right;
+    margin-right: var(--space-sm);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+  }
+
+  table.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-base);
+  }
+  table.stats-table th, table.stats-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+  }
+  table.stats-table th {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+  }
+  .table-scroll { max-height: 360px; overflow-y: auto; }
+
+  .expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1;
+  }
+  .expand-btn:hover { color: var(--color-primary); }
+  tr.stats-row { cursor: pointer; }
+  tr.stats-row:hover { background: var(--color-bg-hover); }
+  tr.detail-row td { padding: 0; border-bottom: 1px solid var(--color-border); background: var(--color-bg-input); }
+  .population-wrap { padding: var(--space-sm) var(--space-md); max-height: 260px; overflow-y: auto; }
+  table.population-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+  table.population-table th, table.population-table td { padding: 4px 8px; text-align: left; }
+  table.population-table th {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    position: sticky;
+    top: 0;
+    background: var(--color-bg-input);
+  }
+  table.population-table .genes { font-family: monospace; letter-spacing: 1px; word-break: break-all; }
+  table.population-table tr.is-best { font-weight: var(--font-weight-bold); color: var(--color-primary-text); }
+
+  canvas { max-width: 100%; }
+
+  @media (max-width: 768px) {
+    .row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Genetic Knapsack</h1>
+<div class="header-sub">A genetic algorithm to solve the knapsack problem</div>
+<div class="header-credit">Adapted from <a href="https://github.com/CorentinTh/genetic-knapsack" target="_blank" rel="noopener noreferrer">CorentinTh</a></div>
+
+<div class="container">
+
+  <div class="panel">
+    <h2>What?</h2>
+    <div>
+      The knapsack problem is a problem in combinatorial optimization: Given a set of items, each with a weight and a value, determine the number of each item to include in a collection so that
+      the total weight is less than or equal to a given limit and the total value is as large as possible.
+    </div>
+    <div>
+      Genetic algorithms are a class of search, adaptation, and optimization algorithms based on the principles of natural evolution. They are frequently used to find optimal or near-optimal
+      solutions to difficult problems which otherwise would take a lifetime to solve.
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel flex-1">
+      <h2>Items</h2>
+      <div class="field-row">
+        <div class="field"><label>Item count</label><input type="number" id="itemCount" min="1" max="200" step="1" value="20" /></div>
+        <div class="field"><label>Backpack capacity</label><input type="number" id="backpackCapacity" min="1" max="100000" step="1" value="100" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Min weight</label><input type="number" id="itemsMinWeight" min="1" max="10000" step="1" value="1" /></div>
+        <div class="field"><label>Max weight</label><input type="number" id="itemsMaxWeight" min="1" max="10000" step="1" value="20" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Min value</label><input type="number" id="itemsMinValue" min="1" max="10000" step="1" value="1" /></div>
+        <div class="field"><label>Max value</label><input type="number" id="itemsMaxValue" min="1" max="10000" step="1" value="20" /></div>
+      </div>
+      <button class="btn btn-primary" id="regenerateBtn">Generate random items</button>
+    </div>
+
+    <div class="panel flex-1">
+      <h2>Parameters</h2>
+      <div class="field-row">
+        <div class="field"><label>Generation count</label><input type="number" id="generationCount" min="1" max="500" step="1" value="20" /></div>
+        <div class="field"><label>Population size</label><input type="number" id="populationSize" min="1" max="500" step="1" value="100" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Mutation rate</label><input type="number" step="0.01" id="mutationRate" min="0" max="1" value="0.01" /></div>
+        <div class="field"><label>Tournament sample size</label><input type="number" id="tournamentSampleSize" min="1" max="500" step="1" value="5" /></div>
+      </div>
+      <button class="btn btn-primary" id="computeBtn">Compute</button>
+      <button class="btn btn-secondary" id="oneMoreBtn" disabled>One more generation</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel flex-1">
+      <h2>All available items</h2>
+      <div class="items-wrap" id="itemsWrap"></div>
+      <div class="divider"></div>
+      <div>Backpack capacity: <strong id="capacityLabel">100kg</strong></div>
+    </div>
+    <div class="panel flex-1">
+      <h2>Items weight/value distribution</h2>
+      <canvas id="itemsChart"></canvas>
+    </div>
+  </div>
+
+  <div id="resultsSection" class="results-section" style="display:none;">
+    <div class="results-title">Results</div>
+    <div class="row">
+      <div class="panel" style="flex: 0 1 400px;">
+        <h2>Best item combination</h2>
+        <div class="items-wrap" id="bestItemsWrap"></div>
+        <div class="divider"></div>
+        <div class="best-line"><span class="label">Total value</span><span id="bestValue"></span></div>
+        <div class="best-line"><span class="label">Total weight</span><span id="bestWeight"></span>kg</div>
+        <div class="best-line"><span class="label">Backpack capacity</span><span id="bestCapacity"></span>kg</div>
+      </div>
+      <div class="panel flex-1">
+        <h2>Best fitness per generation</h2>
+        <canvas id="fitnessChart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Generation breakdown</h2>
+      <div class="table-scroll">
+        <table class="stats-table">
+          <thead>
+            <tr><th></th><th>Generation</th><th>Best fitness</th><th>Weight</th></tr>
+          </thead>
+          <tbody id="statsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ---------- Genetic algorithm (ported from knapsack.ts) ----------
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sampleSize(arr, n) {
+  const copy = arr.slice();
+  const result = [];
+  n = Math.min(n, copy.length);
+  for (let i = 0; i < n; i++) {
+    const idx = Math.floor(Math.random() * copy.length);
+    result.push(copy[idx]);
+    copy.splice(idx, 1);
+  }
+  return result;
+}
+
+function generateItems({ itemCount, weightRange, valueRange }) {
+  const items = [];
+  for (let i = 0; i < itemCount; i++) {
+    items.push({
+      weight: randInt(weightRange.min, weightRange.max),
+      value: randInt(valueRange.min, valueRange.max),
+    });
+  }
+  return { items };
+}
+
+function initializePopulation({ populationSize, initialGenes, items }) {
+  const fn = {
+    random: () => Math.round(Math.random()),
+    zeros: () => 0,
+    ones: () => 1,
+  }[initialGenes || 'random'];
+
+  const population = [];
+  for (let i = 0; i < populationSize; i++) {
+    const individual = [];
+    for (let j = 0; j < items.length; j++) individual.push(fn());
+    population.push(individual);
+  }
+  return population;
+}
+
+function getPresentItems({ individual, items }) {
+  const result = [];
+  individual.forEach((gene, index) => { if (gene === 1) result.push(items[index]); });
+  return result;
+}
+
+function computeFitness({ individual, items, backpackCapacity }) {
+  const selected = getPresentItems({ individual, items });
+  const totalWeight = selected.reduce((acc, { weight }) => acc + weight, 0);
+  const totalValue = selected.reduce((acc, { value }) => acc + value, 0);
+  return totalWeight <= backpackCapacity ? totalValue : 0;
+}
+
+function getWeight({ individual, items }) {
+  return getPresentItems({ individual, items }).reduce((acc, { weight }) => acc + weight, 0);
+}
+
+function evaluatePopulation({ population, items, backpackCapacity }) {
+  return population.map((individual) => ({
+    individual,
+    fitness: computeFitness({ individual, items, backpackCapacity }),
+    weight: getWeight({ individual, items }),
+  }));
+}
+
+function getBestIndividual({ population, items, backpackCapacity }) {
+  let best = null;
+  for (const individual of population) {
+    const fitness = computeFitness({ individual, items, backpackCapacity });
+    const weight = getWeight({ individual, items });
+    if (!best || fitness > best.fitness) best = { individual, fitness, weight };
+  }
+  return best;
+}
+
+function selectParents({ population, items, backpackCapacity, tournamentSampleSize }) {
+  const tournamentSelect = () => {
+    const tournament = sampleSize(population, tournamentSampleSize);
+    return getBestIndividual({ population: tournament, items, backpackCapacity }).individual;
+  };
+  return [tournamentSelect(), tournamentSelect()];
+}
+
+function crossover({ parent1, parent2 }) {
+  const point = Math.floor(Math.random() * parent1.length);
+  return [...parent1.slice(0, point), ...parent2.slice(point)];
+}
+
+function mutate({ individual, mutationRate }) {
+  return individual.map((gene) => (Math.random() < mutationRate ? 1 - gene : gene));
+}
+
+function evolvePopulation(population, { items, backpackCapacity, tournamentSampleSize, mutationRate }) {
+  return population.map(() => {
+    const [parent1, parent2] = selectParents({ population, items, backpackCapacity, tournamentSampleSize });
+    const child = crossover({ parent1, parent2 });
+    return mutate({ individual: child, mutationRate });
+  });
+}
+
+function runGeneration({ population, generation, items, backpackCapacity, tournamentSampleSize, mutationRate }) {
+  const nextPopulation = evolvePopulation(population, { items, backpackCapacity, tournamentSampleSize, mutationRate });
+  const evaluated = evaluatePopulation({ population: nextPopulation, items, backpackCapacity });
+  const best = evaluated.reduce((acc, curr) => (curr.fitness > acc.fitness ? curr : acc));
+  return {
+    population: nextPopulation,
+    stat: { generation, bestFitness: best.fitness, bestIndividual: best.individual, weight: best.weight, population: evaluated },
+  };
+}
+
+function solveKnapsack({ generationCount, populationSize, mutationRate, backpackCapacity, initialGenes, tournamentSampleSize, items }) {
+  let population = initializePopulation({ populationSize, initialGenes, items });
+  const stats = [];
+  const startedAt = performance.now();
+
+  for (let generation = 0; generation < generationCount; generation++) {
+    const result = runGeneration({ population, generation, items, backpackCapacity, tournamentSampleSize, mutationRate });
+    population = result.population;
+    stats.push(result.stat);
+  }
+
+  const duration = Math.round(performance.now() - startedAt);
+  return { stats, items, duration, population };
+}
+
+// ---------- UI wiring ----------
+
+const $ = (id) => document.getElementById(id);
+
+// Reads a numeric field, clamps it into [min, max] and writes the clamped value
+// back so the user can see what was actually used. Out-of-range values used to
+// reach the GA unchecked: a generation count or population size of 0 threw
+// partway through solveKnapsack and left the Compute button stuck on
+// "Computing...", with the page unusable until a reload.
+function clampField(id, min, max, fallback) {
+  const raw = Number($(id).value);
+  const n = Number.isFinite(raw) ? Math.min(max, Math.max(min, raw)) : fallback;
+  $(id).value = n;
+  return n;
+}
+
+let items = [];
+let itemsChart, fitnessChart;
+let knapsackResult = null;
+let currentPopulation = null;
+let currentRunParams = null;
+
+function renderItemChips(container, itemList) {
+  container.innerHTML = '';
+  itemList.forEach((item) => {
+    const chip = document.createElement('div');
+    chip.className = 'item-chip';
+    chip.innerHTML = `<div class="value">${item.value}</div><div>${item.weight}kg</div>`;
+    container.appendChild(chip);
+  });
+}
+
+// Chart.js comes from a CDN. If it didn't load, the GA still runs; the charts are
+// replaced by a message.
+function chartUnavailable(canvasId) {
+  if (window.Chart) return false;
+  const canvas = $(canvasId);
+  if (canvas) canvas.outerHTML = '<p style="margin:0; color:var(--color-text-muted);">This chart couldn\'t be shown because its charting library (Chart.js) failed to load. Check your internet connection and reload the page.</p>';
+  return true;
+}
+
+function renderItemsChart() {
+  if (chartUnavailable('itemsChart')) return;
+  const ctx = $('itemsChart').getContext('2d');
+  if (itemsChart) itemsChart.destroy();
+  itemsChart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: 'Items',
+        data: items.map((s) => ({ x: s.weight, y: s.value })),
+        backgroundColor: '#2563eb',
+      }],
+    },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: {
+        x: { title: { display: true, text: 'Weight' } },
+        y: { title: { display: true, text: 'Value' } },
+      },
+    },
+  });
+}
+
+function regenerateItems() {
+  const itemCount = clampField('itemCount', 1, 200, 20);
+  const minWeight = clampField('itemsMinWeight', 1, 10000, 1);
+  const minValue  = clampField('itemsMinValue', 1, 10000, 1);
+  // A max below its min would make randInt produce nonsense, so raise it to the min.
+  const weightRange = { min: minWeight, max: clampField('itemsMaxWeight', minWeight, 10000, 20) };
+  const valueRange  = { min: minValue,  max: clampField('itemsMaxValue', minValue, 10000, 20) };
+  clampField('backpackCapacity', 1, 100000, 100);
+
+  items = generateItems({ itemCount, weightRange, valueRange }).items;
+  renderItemChips($('itemsWrap'), items);
+  renderItemsChart();
+  $('capacityLabel').textContent = `${$('backpackCapacity').value}kg`;
+
+  knapsackResult = null;
+  currentPopulation = null;
+  currentRunParams = null;
+  $('oneMoreBtn').disabled = true;
+  $('resultsSection').style.display = 'none';
+}
+
+function renderFitnessChart(stats) {
+  if (chartUnavailable('fitnessChart')) return;
+  const ctx = $('fitnessChart').getContext('2d');
+  if (fitnessChart) fitnessChart.destroy();
+  fitnessChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: stats.map((s) => s.generation),
+      datasets: [{
+        label: 'Best fitness',
+        data: stats.map((s) => s.bestFitness),
+        borderColor: '#2563eb',
+        backgroundColor: '#2563eb',
+        tension: 0.2,
+      }],
+    },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { title: { display: true, text: 'Generation' } },
+        y: { title: { display: true, text: 'Fitness' } },
+      },
+    },
+  });
+}
+
+function buildPopulationTable(population) {
+  const sorted = population.slice().sort((a, b) => b.fitness - a.fitness);
+  const bestFitness = sorted[0]?.fitness;
+
+  const rows = sorted
+    .map(
+      ({ individual, fitness, weight }, i) =>
+        `<tr class="${fitness === bestFitness ? 'is-best' : ''}"><td>${i + 1}</td><td class="genes">${individual.join('')}</td><td>${fitness}</td><td>${weight}kg</td></tr>`,
+    )
+    .join('');
+
+  return `
+    <div class="population-wrap">
+      <table class="population-table">
+        <thead><tr><th>#</th><th>Genes</th><th>Fitness</th><th>Weight</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function appendStatsRow(s) {
+  const body = $('statsBody');
+  const tr = document.createElement('tr');
+  tr.className = 'stats-row';
+  tr.innerHTML = `<td><button class="expand-btn" type="button">▶</button></td><td>${s.generation}</td><td>${s.bestFitness}</td><td>${s.weight}kg</td>`;
+
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'detail-row';
+  detailTr.style.display = 'none';
+  const detailTd = document.createElement('td');
+  detailTd.colSpan = 4;
+  detailTr.appendChild(detailTd);
+
+  let built = false;
+  const toggle = () => {
+    if (!built) {
+      detailTd.innerHTML = buildPopulationTable(s.population);
+      built = true;
+    }
+    const expanded = detailTr.style.display !== 'none';
+    detailTr.style.display = expanded ? 'none' : 'table-row';
+    tr.querySelector('.expand-btn').textContent = expanded ? '▶' : '▼';
+  };
+
+  tr.addEventListener('click', toggle);
+  body.appendChild(tr);
+  body.appendChild(detailTr);
+}
+
+function renderStatsTable(stats) {
+  $('statsBody').innerHTML = '';
+  stats.forEach(appendStatsRow);
+}
+
+function updateBestPanel(last, backpackCapacity) {
+  const bestItems = items.filter((_, i) => last.bestIndividual[i]);
+  renderItemChips($('bestItemsWrap'), bestItems);
+  $('bestValue').textContent = last.bestFitness;
+  $('bestWeight').textContent = last.weight;
+  $('bestCapacity').textContent = backpackCapacity;
+}
+
+function computeKnapsack() {
+  const btn = $('computeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Computing...';
+  $('oneMoreBtn').disabled = true;
+
+  setTimeout(() => {
+    try {
+      const backpackCapacity = clampField('backpackCapacity', 1, 100000, 100);
+      const mutationRate = clampField('mutationRate', 0, 1, 0.01);
+      const tournamentSampleSize = clampField('tournamentSampleSize', 1, 500, 5);
+
+      const result = solveKnapsack({
+        generationCount: clampField('generationCount', 1, 500, 20),
+        populationSize: clampField('populationSize', 1, 500, 100),
+        mutationRate,
+        backpackCapacity,
+        initialGenes: 'random',
+        tournamentSampleSize,
+        items,
+      });
+
+      knapsackResult = result;
+      currentPopulation = result.population;
+      currentRunParams = { items, backpackCapacity, mutationRate, tournamentSampleSize };
+
+      updateBestPanel(result.stats.at(-1), backpackCapacity);
+      renderFitnessChart(result.stats);
+      renderStatsTable(result.stats);
+
+      $('resultsSection').style.display = 'flex';
+
+      $('oneMoreBtn').disabled = false;
+    } finally {
+      // finally, not just the happy path: an exception here previously left the
+      // button disabled and reading "Computing..." forever.
+      btn.disabled = false;
+      btn.textContent = 'Compute';
+    }
+  }, 20);
+}
+
+function runOneMoreGeneration() {
+  if (!currentPopulation || !currentRunParams) return;
+
+  const computeBtn = $('computeBtn');
+  const oneMoreBtn = $('oneMoreBtn');
+  oneMoreBtn.disabled = true;
+  computeBtn.disabled = true;
+
+  setTimeout(() => {
+    try {
+      const generation = knapsackResult.stats.length;
+      const { population, stat } = runGeneration({ population: currentPopulation, generation, ...currentRunParams });
+
+      currentPopulation = population;
+      knapsackResult.stats.push(stat);
+
+      updateBestPanel(stat, currentRunParams.backpackCapacity);
+      renderFitnessChart(knapsackResult.stats);
+      appendStatsRow(stat);
+    } finally {
+      computeBtn.disabled = false;
+      oneMoreBtn.disabled = false;
+    }
+  }, 20);
+}
+
+$('regenerateBtn').addEventListener('click', regenerateItems);
+$('computeBtn').addEventListener('click', computeKnapsack);
+$('oneMoreBtn').addEventListener('click', runOneMoreGeneration);
+$('backpackCapacity').addEventListener('input', () => {
+  $('capacityLabel').textContent = `${$('backpackCapacity').value}kg`;
+});
+
+regenerateItems();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bayesian Network Simulator</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-family); background: var(--color-bg-page); color: var(--color-text); min-height: 100vh; }
+  header { padding: var(--space-xl) 16px var(--space-lg); text-align: center; }
+  header h1 {
+    font-size: var(--font-size-title); font-weight: var(--font-weight-bold);
+    background: var(--gradient-title); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  header p { font-size: var(--font-size-base); color: var(--color-text); margin-top: var(--space-xs); }
+  .tabs { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-sm); padding: 0 16px var(--space-lg); }
+  .tab {
+    padding: 10px 18px; cursor: pointer; font-size: var(--font-size-ui); font-weight: var(--font-weight-normal);
+    color: var(--color-text); background: var(--color-bg-input); border: 2px solid transparent;
+    border-radius: var(--radius-md); transition: var(--transition-fast);
+  }
+  .tab:hover { background: var(--color-bg-hover); }
+  .tab.active { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-text); font-weight: var(--font-weight-semi); }
+  .network { display: none; padding: 24px 28px; }
+  .network.active { display: block; }
+  .layout { display: flex; gap: 20px; align-items: flex-start; justify-content: center; flex-wrap: wrap; width: 100%; max-width: 1100px; margin: 0 auto; }
+  .graph-wrap { background: var(--color-bg-panel); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 16px; flex-shrink: 0; max-width: 100%; }
+  svg.net { height: auto; max-width: 100%; display: block; } /* width set in drawNetwork */
+  .sidebar { display: flex; flex-direction: column; gap: 12px; width: 220px; flex-shrink: 0; }
+  .card { background: var(--color-bg-panel); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 14px; }
+  .card h3 {
+    font-size: var(--font-size-label); font-weight: var(--font-weight-semi); text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label); color: var(--color-text); margin-bottom: 10px;
+  }
+  .description { font-size: var(--font-size-sm); color: var(--color-text); line-height: 1.65; }
+  .description b { color: var(--color-text); }
+  .reset-btn {
+    width: 100%; padding: 9px; background: var(--color-bg-input); border: 1px solid var(--color-border);
+    border-radius: var(--radius-md); color: var(--color-text); font-size: var(--font-size-base); cursor: pointer; transition: var(--transition-fast);
+  }
+  .reset-btn:hover { border-color: var(--color-primary); background: var(--color-bg-hover); }
+  .legend-row { display: flex; align-items: center; gap: 7px; font-size: var(--font-size-sm); color: var(--color-text); margin-bottom: 6px; }
+  .legend-row:last-child { margin-bottom: 0; }
+  .swatch { width: 10px; height: 10px; border-radius: var(--radius-sm); flex-shrink: 0; }
+  .cpt-panel { font-size: var(--font-size-sm); }
+  .cpt-panel .cpt-title {
+    font-size: var(--font-size-label); font-weight: var(--font-weight-semi); text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label); color: var(--color-text); margin-bottom: 10px;
+  }
+  .cpt-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+  .cpt-table th { color: var(--color-text); padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: var(--font-weight-semi); }
+  .cpt-table td { color: var(--color-text-muted); padding: 3px 6px; border-bottom: 1px solid var(--color-bg-hover); }
+  .cpt-table td.prob-true { color: var(--color-primary); font-weight: var(--font-weight-semi); text-align: right; }
+  .cpt-table td.prob-false { color: var(--color-text-faint); text-align: right; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bayesian Network Simulator</h1>
+  <p>Click a bar in any node to set evidence, and other probabilities will update automatically. Click again to unset.</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('wet')">Wet Grass</div>
+  <div class="tab" onclick="switchTab('asia')">Asia Network</div>
+  <div class="tab" onclick="switchTab('student')">Student Network</div>
+  <div class="tab" onclick="switchTab('car')">Car Diagnosis</div>
+</div>
+
+<div id="wet" class="network active">
+  <div class="layout">
+    <div class="graph-wrap"><svg id="wet-svg" class="net"></svg></div>
+    <div class="sidebar">
+      <div class="card">
+        <h3>Legend</h3>
+        <div class="legend-row"><div class="swatch" style="background:#2563eb"></div>P(True) bar — click to assert True</div>
+        <div class="legend-row"><div class="swatch" style="background:#94a3b8"></div>P(False) bar — click to assert False</div>
+        <div class="legend-row"><div class="swatch" style="background:#16a34a"></div>Evidence set to True</div>
+        <div class="legend-row"><div class="swatch" style="background:#dc2626"></div>Evidence set to False</div>
+      </div>
+      <button class="reset-btn" onclick="resetEvidence('wet')">Reset All Evidence</button>
+      <div class="card description">
+        <b>Wet Grass Network</b><br><br>
+        Classic introductory Bayesian network. Cloudy weather influences both the sprinkler and rain. Together they determine whether the grass is wet.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="asia" class="network">
+  <div class="layout">
+    <div class="graph-wrap"><svg id="asia-svg" class="net"></svg></div>
+    <div class="sidebar">
+      <div class="card">
+        <h3>Legend</h3>
+        <div class="legend-row"><div class="swatch" style="background:#2563eb"></div>P(True) bar — click to assert True</div>
+        <div class="legend-row"><div class="swatch" style="background:#94a3b8"></div>P(False) bar — click to assert False</div>
+        <div class="legend-row"><div class="swatch" style="background:#16a34a"></div>Evidence set to True</div>
+        <div class="legend-row"><div class="swatch" style="background:#dc2626"></div>Evidence set to False</div>
+      </div>
+      <button class="reset-btn" onclick="resetEvidence('asia')">Reset All Evidence</button>
+      <div class="card description">
+        <b>Asia Network</b><br><br>
+        Lauritzen &amp; Spiegelhalter (1988). Diagnostic network for chest disease linking travel history and smoking to tuberculosis, lung cancer, and bronchitis.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="student" class="network">
+  <div class="layout">
+    <div class="graph-wrap"><svg id="student-svg" class="net"></svg></div>
+    <div class="sidebar">
+      <div class="card">
+        <h3>Legend</h3>
+        <div class="legend-row"><div class="swatch" style="background:#2563eb"></div>P(True) bar — click to assert True</div>
+        <div class="legend-row"><div class="swatch" style="background:#94a3b8"></div>P(False) bar — click to assert False</div>
+        <div class="legend-row"><div class="swatch" style="background:#16a34a"></div>Evidence set to True</div>
+        <div class="legend-row"><div class="swatch" style="background:#dc2626"></div>Evidence set to False</div>
+      </div>
+      <button class="reset-btn" onclick="resetEvidence('student')">Reset All Evidence</button>
+      <div class="card description">
+        <b>Student Network</b><br><br>
+        Koller &amp; Friedman (2009). Models a student's grade as depending on course difficulty and their intelligence. A strong grade leads to a good letter of recommendation; high intelligence also predicts a good SAT score.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="car" class="network">
+  <div class="layout">
+    <div class="graph-wrap"><svg id="car-svg" class="net"></svg></div>
+    <div class="sidebar">
+      <div class="card">
+        <h3>Legend</h3>
+        <div class="legend-row"><div class="swatch" style="background:#2563eb"></div>P(True) bar — click to assert True</div>
+        <div class="legend-row"><div class="swatch" style="background:#94a3b8"></div>P(False) bar — click to assert False</div>
+        <div class="legend-row"><div class="swatch" style="background:#16a34a"></div>Evidence set to True</div>
+        <div class="legend-row"><div class="swatch" style="background:#dc2626"></div>Evidence set to False</div>
+      </div>
+      <button class="reset-btn" onclick="resetEvidence('car')">Reset All Evidence</button>
+      <div class="card description">
+        <b>Car Diagnosis Network</b><br><br>
+        Russell &amp; Norvig (2010). Models the causal chain from battery, alternator, and fuel through to whether the car starts. Electrical power gates both the starter motor and fuel system. Useful for diagnosing why a car won't start.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// ─── Inference Engine ─────────────────────────────────────────────────────────
+
+function multiplyFactors(f1, f2) {
+  const vars = [...new Set([...f1.vars, ...f2.vars])];
+  const table = {};
+  for (const assign of assignments(vars)) {
+    const k = key(vars, assign);
+    table[k] = (f1.table[key(f1.vars, assign)] ?? 1) * (f2.table[key(f2.vars, assign)] ?? 1);
+  }
+  return { vars, table };
+}
+
+function marginalize(factor, v) {
+  const vars = factor.vars.filter(x => x !== v);
+  const table = {};
+  for (const assign of assignments(factor.vars)) {
+    const k = key(vars, assign);
+    table[k] = (table[k] || 0) + factor.table[key(factor.vars, assign)];
+  }
+  return { vars, table };
+}
+
+function restrictFactor(factor, v, val) {
+  const vars = factor.vars.filter(x => x !== v);
+  const table = {};
+  for (const assign of assignments(factor.vars)) {
+    if (assign[v] !== val) continue;
+    table[key(vars, assign)] = factor.table[key(factor.vars, assign)];
+  }
+  return { vars, table };
+}
+
+function normalize(factor) {
+  const total = Object.values(factor.table).reduce((a, b) => a + b, 0);
+  const table = {};
+  for (const [k, v] of Object.entries(factor.table)) table[k] = v / total;
+  return { vars: factor.vars, table };
+}
+
+function key(vars, assign) { return vars.map(v => assign[v]).join(','); }
+
+function* assignments(vars, idx = 0, cur = {}) {
+  if (idx === vars.length) { yield { ...cur }; return; }
+  for (const v of [true, false]) { cur[vars[idx]] = v; yield* assignments(vars, idx + 1, cur); }
+}
+
+function lookupCPT(cpt, parents, vals) {
+  if (!parents.length) return cpt[0];
+  return cpt[vals.reduce((a, v) => a * 2 + (v ? 0 : 1), 0)];
+}
+
+function buildFactor(node) {
+  const vars = [node.name, ...node.parents];
+  const table = {};
+  for (const assign of assignments(vars)) {
+    let p = lookupCPT(node.cpt, node.parents, node.parents.map(pa => assign[pa]));
+    if (!assign[node.name]) p = 1 - p;
+    table[key(vars, assign)] = p;
+  }
+  return { vars, table };
+}
+
+function infer(nodes, query, evidence) {
+  let factors = nodes.map(buildFactor);
+  for (const [v, val] of Object.entries(evidence)) {
+    factors = factors
+      .map(f => f.vars.includes(v) ? restrictFactor(f, v, val) : f)
+      .filter(f => f.vars.length > 0 || Object.keys(f.table).length > 0);
+  }
+  const hidden = nodes.map(n => n.name).filter(n => n !== query && !(n in evidence));
+  for (const h of hidden) {
+    const rel = factors.filter(f => f.vars.includes(h));
+    const rest = factors.filter(f => !f.vars.includes(h));
+    const prod = rel.length ? rel.reduce(multiplyFactors) : { vars: [], table: { '': 1 } };
+    factors = [...rest, marginalize(prod, h)];
+  }
+  const result = normalize(factors.reduce(multiplyFactors));
+  return result.table[key(result.vars, { [query]: true })] ?? 0;
+}
+
+function inferAll(nodes, evidence) {
+  const out = {};
+  for (const n of nodes)
+    out[n.name] = n.name in evidence ? (evidence[n.name] ? 1 : 0) : infer(nodes, n.name, evidence);
+  return out;
+}
+
+// ─── Network Definitions ──────────────────────────────────────────────────────
+
+const networks = {
+  wet: {
+    nodes: [
+      { name: 'Cloudy',    parents: [],                   cpt: [0.5] },
+      { name: 'Sprinkler', parents: ['Cloudy'],            cpt: [0.1, 0.5] },
+      { name: 'Rain',      parents: ['Cloudy'],            cpt: [0.8, 0.2] },
+      { name: 'WetGrass',  parents: ['Sprinkler', 'Rain'], cpt: [0.99, 0.90, 0.90, 0.001] },
+    ],
+    edges: [['Cloudy','Sprinkler'], ['Cloudy','Rain'], ['Sprinkler','WetGrass'], ['Rain','WetGrass']],
+    positions: { Cloudy:[215,52], Sprinkler:[90,185], Rain:[340,185], WetGrass:[215,318] },
+    viewBox: '0 0 430 358',
+  },
+  asia: {
+    nodes: [
+      { name: 'Visit',        parents: [],                          cpt: [0.01] },
+      { name: 'Tuberculosis', parents: ['Visit'],                   cpt: [0.05, 0.01] },
+      { name: 'Smoking',      parents: [],                          cpt: [0.5] },
+      { name: 'LungCancer',   parents: ['Smoking'],                 cpt: [0.10, 0.01] },
+      { name: 'Bronchitis',   parents: ['Smoking'],                 cpt: [0.60, 0.30] },
+      { name: 'Either',       parents: ['Tuberculosis','LungCancer'], cpt: [1, 1, 1, 0] },
+      { name: 'XRay',         parents: ['Either'],                  cpt: [0.98, 0.05] },
+      { name: 'Dyspnoea',     parents: ['Either','Bronchitis'],     cpt: [0.90, 0.70, 0.80, 0.10] },
+    ],
+    edges: [
+      ['Visit','Tuberculosis'], ['Smoking','LungCancer'], ['Smoking','Bronchitis'],
+      ['Tuberculosis','Either'], ['LungCancer','Either'],
+      ['Either','XRay'], ['Either','Dyspnoea'], ['Bronchitis','Dyspnoea'],
+    ],
+    positions: {
+      Visit:[75,52], Tuberculosis:[75,178], Smoking:[365,52],
+      LungCancer:[258,178], Bronchitis:[440,178],
+      Either:[217,304], XRay:[108,430], Dyspnoea:[355,430],
+    },
+    viewBox: '0 0 508 475',
+  },
+  student: {
+    nodes: [
+      { name: 'Difficulty',   parents: [],                     cpt: [0.4] },
+      { name: 'Intelligence', parents: [],                     cpt: [0.3] },
+      { name: 'Grade',        parents: ['Intelligence','Difficulty'], cpt: [0.50, 0.90, 0.20, 0.50] },
+      { name: 'SAT',          parents: ['Intelligence'],       cpt: [0.95, 0.20] },
+      { name: 'Letter',       parents: ['Grade'],              cpt: [0.90, 0.05] },
+    ],
+    edges: [['Difficulty','Grade'],['Intelligence','Grade'],['Intelligence','SAT'],['Grade','Letter']],
+    positions: { Difficulty:[100,52], Intelligence:[330,52], Grade:[170,185], SAT:[330,185], Letter:[170,318] },
+    viewBox: '0 0 430 358',
+  },
+  car: {
+    nodes: [
+      { name: 'Battery',         parents: [],                          cpt: [0.9] },
+      { name: 'Alternator',      parents: [],                          cpt: [0.9] },
+      { name: 'Fuel',            parents: [],                          cpt: [0.95] },
+      { name: 'ElectricalPower', parents: ['Battery','Alternator'],    cpt: [0.99, 0.90, 0.10, 0.01] },
+      { name: 'FuelSystem',      parents: ['ElectricalPower','Fuel'],  cpt: [0.99, 0.01, 0.01, 0.001] },
+      { name: 'Starter',         parents: ['ElectricalPower'],         cpt: [0.98, 0.02] },
+      { name: 'Cranks',          parents: ['Starter'],                 cpt: [0.99, 0.01] },
+      { name: 'Starts',          parents: ['Cranks','FuelSystem'],     cpt: [0.99, 0.01, 0.01, 0.001] },
+    ],
+    edges: [
+      ['Battery','ElectricalPower'], ['Alternator','ElectricalPower'],
+      ['ElectricalPower','Starter'], ['ElectricalPower','FuelSystem'],
+      ['Fuel','FuelSystem'], ['Starter','Cranks'], ['Cranks','Starts'], ['FuelSystem','Starts'],
+    ],
+    positions: {
+      Battery:[100,52], Alternator:[255,52], Fuel:[400,52],
+      ElectricalPower:[175,185], FuelSystem:[355,185],
+      Starter:[175,310], Cranks:[100,440], Starts:[310,440],
+    },
+    viewBox: '0 0 470 485',
+  },
+};
+
+const nodeLabels = {
+  Cloudy:'Cloudy', Sprinkler:'Sprinkler', Rain:'Rain', WetGrass:'Wet Grass',
+  Visit:'Visit Asia', Tuberculosis:'Tuberculosis', Smoking:'Smoking',
+  LungCancer:'Lung Cancer', Bronchitis:'Bronchitis', Either:'Tuberculosis or Lung Cancer',
+  XRay:'Positive X-Ray', Dyspnoea:'Dyspnoea',
+  Difficulty:'Difficulty', Intelligence:'Intelligence', Grade:'Grade', SAT:'SAT Score', Letter:'Rec. Letter',
+  Battery:'Battery', Alternator:'Alternator', Fuel:'Fuel', ElectricalPower:'Electrical Power',
+  FuelSystem:'Fuel System', Starter:'Starter Motor', Cranks:'Engine Cranks', Starts:'Car Starts',
+};
+
+const evidence = { wet: {}, asia: {}, student: {}, car: {} };
+
+// ─── Drawing ──────────────────────────────────────────────────────────────────
+
+const NW = 108, NH = 80;
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// Returns the point where the line from (cx,cy) toward (tx,ty) exits the node rectangle
+function rectEdgePoint(cx, cy, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  if (!dx && !dy) return [cx, cy];
+  const hw = NW / 2 + 2, hh = NH / 2 + 2;
+  const tx_ = dx !== 0 ? hw / Math.abs(dx) : Infinity;
+  const ty_ = dy !== 0 ? hh / Math.abs(dy) : Infinity;
+  const t = Math.min(tx_, ty_);
+  return [cx + dx * t, cy + dy * t];
+}
+
+function splitLabel(label) {
+  if (label.length <= 13) return [label];
+  const words = label.split(' ');
+  if (words.length < 2) return [label];
+  const mid = Math.ceil(words.length / 2);
+  return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+}
+
+function drawNetwork(netId) {
+  const net = networks[netId];
+  const ev = evidence[netId];
+  const probs = inferAll(net.nodes, ev);
+  const svg = document.getElementById(`${netId}-svg`);
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', net.viewBox);
+  // 510px tall on wide screens (width from the viewBox aspect ratio), but able to shrink
+  // with max-width: 100% on narrow ones, keeping its proportions via height: auto.
+  const [, , vbW, vbH] = net.viewBox.split(' ').map(Number);
+  svg.style.width = `${510 * vbW / vbH}px`;
+
+  // Arrow marker
+  const defs = svgEl('defs');
+  const marker = svgEl('marker', { id: `arr-${netId}`, markerWidth: 8, markerHeight: 6, refX: 8, refY: 3, orient: 'auto' });
+  marker.appendChild(svgEl('polygon', { points: '0 0,8 3,0 6', fill: '#94a3b8' }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Edges (drawn first, behind nodes)
+  for (const [from, to] of net.edges) {
+    const [fx, fy] = net.positions[from];
+    const [tx, ty] = net.positions[to];
+    const [x1, y1] = rectEdgePoint(fx, fy, tx, ty);
+    const [x2, y2] = rectEdgePoint(tx, ty, fx, fy);
+    svg.appendChild(svgEl('line', {
+      x1, y1, x2, y2,
+      stroke: '#94a3b8', 'stroke-width': 1.5,
+      'marker-end': `url(#arr-${netId})`,
+    }));
+  }
+
+  // Nodes
+  for (const node of net.nodes) {
+    const [cx, cy] = net.positions[node.name];
+    const x = cx - NW / 2, y = cy - NH / 2;
+    const prob = probs[node.name];
+    const nodeEv = ev[node.name];
+    const isTrueEv = nodeEv === true;
+    const isFalseEv = nodeEv === false;
+    const borderColor = isTrueEv ? '#16a34a' : isFalseEv ? '#dc2626' : '#cbd5e1';
+    const borderWidth = (isTrueEv || isFalseEv) ? 2.5 : 1.5;
+
+    const g = svgEl('g');
+
+    // Node background
+    g.appendChild(svgEl('rect', { x, y, width: NW, height: NH, rx: 7, fill: '#ffffff', stroke: borderColor, 'stroke-width': borderWidth }));
+
+    // Name label (one or two lines)
+    const lines = splitLabel(nodeLabels[node.name] || node.name);
+    const nameBaseY = lines.length === 1 ? y + 13 : y + 8;
+    lines.forEach((line, i) => {
+      const t = svgEl('text', {
+        x: cx, y: nameBaseY + i * 11,
+        'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        fill: '#000000', 'font-size': 9.5, 'font-weight': 600,
+      });
+      t.textContent = line;
+      g.appendChild(t);
+    });
+
+    // Separator
+    const sepY = lines.length === 1 ? y + 22 : y + 24;
+    g.appendChild(svgEl('line', { x1: x + 6, y1: sepY, x2: x + NW - 6, y2: sepY, stroke: '#e2e8f0', 'stroke-width': 1 }));
+
+    // Clickable header — shows CPT in sidebar
+    const headerBtn = svgEl('rect', { x, y, width: NW, height: sepY - y, rx: 7, fill: 'transparent', cursor: 'pointer' });
+    const tip = document.createElementNS(SVG_NS, 'title');
+    tip.textContent = 'Click to view conditional probability table';
+    headerBtn.appendChild(tip);
+    headerBtn.addEventListener('click', () => showCPT(netId, node.name));
+    g.appendChild(headerBtn);
+
+    // Bar layout
+    const barTop = sepY + 13;
+    const barBottom = y + NH - 12;
+    const barH = barBottom - barTop;
+    const barW = Math.floor((NW - 22) / 2);
+    const trueX = x + 6;
+    const falseX = trueX + barW + 8;
+
+    // ── True bar ──
+    const trueBg = svgEl('rect', { x: trueX, y: barTop, width: barW, height: barH, rx: 3, fill: '#f1f5f9' });
+    trueBg.style.cursor = 'pointer';
+    trueBg.addEventListener('click', () => handleClick(netId, node.name, true));
+    g.appendChild(trueBg);
+
+    const tFillH = barH * prob;
+    if (tFillH > 0.5) {
+      const tFill = svgEl('rect', {
+        x: trueX, y: barTop + barH - tFillH,
+        width: barW, height: tFillH, rx: 3,
+        fill: isTrueEv ? '#16a34a' : '#2563eb',
+      });
+      tFill.style.pointerEvents = 'none';
+      g.appendChild(tFill);
+    }
+    // Evidence highlight ring
+    if (isTrueEv) {
+      const ring = svgEl('rect', { x: trueX, y: barTop, width: barW, height: barH, rx: 3, fill: 'none', stroke: '#16a34a', 'stroke-width': 2 });
+      ring.style.pointerEvents = 'none';
+      g.appendChild(ring);
+    }
+
+    // ── False bar ──
+    const falseBg = svgEl('rect', { x: falseX, y: barTop, width: barW, height: barH, rx: 3, fill: '#f1f5f9' });
+    falseBg.style.cursor = 'pointer';
+    falseBg.addEventListener('click', () => handleClick(netId, node.name, false));
+    g.appendChild(falseBg);
+
+    const fFillH = barH * (1 - prob);
+    if (fFillH > 0.5) {
+      const fFill = svgEl('rect', {
+        x: falseX, y: barTop + barH - fFillH,
+        width: barW, height: fFillH, rx: 3,
+        fill: isFalseEv ? '#dc2626' : '#94a3b8',
+      });
+      fFill.style.pointerEvents = 'none';
+      g.appendChild(fFill);
+    }
+    if (isFalseEv) {
+      const ring = svgEl('rect', { x: falseX, y: barTop, width: barW, height: barH, rx: 3, fill: 'none', stroke: '#dc2626', 'stroke-width': 2 });
+      ring.style.pointerEvents = 'none';
+      g.appendChild(ring);
+    }
+
+    // Percentage values above bars
+    const pctY = barTop - 4;
+    const tPct = svgEl('text', { x: trueX + barW / 2, y: pctY, 'text-anchor': 'middle', 'dominant-baseline': 'auto', fill: '#475569', 'font-size': 9 });
+    tPct.textContent = `${(prob * 100).toFixed(1)}%`;
+    g.appendChild(tPct);
+
+    const fPct = svgEl('text', { x: falseX + barW / 2, y: pctY, 'text-anchor': 'middle', 'dominant-baseline': 'auto', fill: '#475569', 'font-size': 9 });
+    fPct.textContent = `${((1 - prob) * 100).toFixed(1)}%`;
+    g.appendChild(fPct);
+
+    // True / False axis labels below bars
+    const axisY = y + NH - 3;
+    const tLbl = svgEl('text', { x: trueX + barW / 2, y: axisY, 'text-anchor': 'middle', 'dominant-baseline': 'auto', fill: '#64748b', 'font-size': 9 });
+    tLbl.textContent = 'True';
+    g.appendChild(tLbl);
+
+    const fLbl = svgEl('text', { x: falseX + barW / 2, y: axisY, 'text-anchor': 'middle', 'dominant-baseline': 'auto', fill: '#64748b', 'font-size': 9 });
+    fLbl.textContent = 'False';
+    g.appendChild(fLbl);
+
+    svg.appendChild(g);
+  }
+}
+
+function cptRows(parents) {
+  const n = parents.length;
+  const rows = [];
+  for (let i = 0; i < Math.pow(2, n); i++) {
+    const row = {};
+    for (let j = 0; j < n; j++) row[parents[j]] = ((i >> (n - 1 - j)) & 1) === 0;
+    rows.push(row);
+  }
+  return rows;
+}
+
+function showCPT(netId, nodeName) {
+  const node = networks[netId].nodes.find(n => n.name === nodeName);
+  const panel = document.getElementById(`${netId}-cpt`);
+  const label = nodeLabels[nodeName] || nodeName;
+
+  let html = `<div class="cpt-title">CPT: ${label}</div><table class="cpt-table">`;
+
+  if (node.parents.length === 0) {
+    html += `<thead><tr><th>P(True)</th><th>P(False)</th></tr></thead>
+      <tbody><tr>
+        <td class="prob-true">${node.cpt[0].toFixed(3)}</td>
+        <td class="prob-false">${(1 - node.cpt[0]).toFixed(3)}</td>
+      </tr></tbody>`;
+  } else {
+    html += `<thead><tr>`;
+    for (const p of node.parents) html += `<th>${nodeLabels[p] || p}</th>`;
+    html += `<th>P(True)</th><th>P(False)</th></tr></thead><tbody>`;
+    cptRows(node.parents).forEach((row, i) => {
+      const pTrue = node.cpt[i];
+      html += `<tr>`;
+      for (const p of node.parents) html += `<td>${row[p] ? 'True' : 'False'}</td>`;
+      html += `<td class="prob-true">${pTrue.toFixed(3)}</td><td class="prob-false">${(1 - pTrue).toFixed(3)}</td></tr>`;
+    });
+    html += `</tbody>`;
+  }
+
+  html += `</table>`;
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function handleClick(netId, nodeName, value) {
+  const ev = evidence[netId];
+  if (ev[nodeName] === value) delete ev[nodeName]; // click same bar again = unset
+  else ev[nodeName] = value;
+  drawNetwork(netId);
+}
+
+function resetEvidence(netId) {
+  evidence[netId] = {};
+  drawNetwork(netId);
+}
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['wet','asia','student','car'][i] === id));
+  document.querySelectorAll('.network').forEach(n => n.classList.toggle('active', n.id === id));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  for (const netId of ['wet', 'asia', 'student', 'car']) {
+    const sidebar = document.querySelector(`#${netId} .sidebar`);
+    const desc = sidebar.querySelector('.card.description');
+    const panel = document.createElement('div');
+    panel.id = `${netId}-cpt`;
+    panel.className = 'card cpt-panel';
+    panel.style.display = 'none';
+    sidebar.insertBefore(panel, desc);
+  }
+  drawNetwork('wet');
+  drawNetwork('asia');
+  drawNetwork('student');
+  drawNetwork('car');
+});
+</script>
+</body>
+</html>
+

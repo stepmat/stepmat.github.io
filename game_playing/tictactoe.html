@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe vs AI</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 120px);
+    grid-template-rows: repeat(3, 120px);
+    border: 3px solid var(--color-border);
+    background: var(--color-bg-panel);
+    position: relative;
+  }
+  .cell {
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 64px; cursor: pointer; user-select: none;
+    border: 1px solid var(--color-border); transition: background 0.15s;
+  }
+  .cell:hover:not(.taken) { background: rgba(37,99,235,0.06); }
+  .cell.taken { cursor: default; }
+  .cell.win-cell { background: rgba(37,99,235,0.18); }
+  .x-piece, .o-piece { flex-shrink: 0; }
+  .x-piece {
+    width: 72px; height: 72px;
+    position: relative;
+  }
+  .x-piece::before, .x-piece::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 72px; height: 7px;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px #111;
+    transform-origin: center;
+  }
+  .x-piece::before { transform: translate(-50%, -50%) rotate(45deg); }
+  .x-piece::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+  .o-piece {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: #fff;
+    border: 4px solid #111;
+    box-sizing: border-box;
+  }
+  #arrow-overlay { position: absolute; top: 3px; left: 3px; width: 360px; height: 360px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">← Games</a>
+  <h1>✕ Tic Tac Toe</h1>
+</div>
+<div class="main">
+  <div id="board-wrap" style="position:relative; display:inline-block;">
+    <div id="board"></div>
+    <svg id="arrow-overlay" viewBox="0 0 360 360"></svg>
+  </div>
+  <div id="sidebar" class="sidebar"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// ─── Game Logic ───────────────────────────────────────────────────────────────
+
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+function checkWinner(board) {
+  for (const [a,b,c] of LINES)
+    if (board[a] && board[a]===board[b] && board[b]===board[c])
+      return {winner:board[a], line:[a,b,c]};
+  if (board.every(c => c!==null)) return {winner:'draw', line:[]};
+  return null;
+}
+
+function legalMoves(board) {
+  return board.map((c,i) => c===null ? i : -1).filter(i => i>=0);
+}
+
+function applyMove(board, idx, player) {
+  const b=[...board]; b[idx]=player; return b;
+}
+
+// ─── Heuristics ───────────────────────────────────────────────────────────────
+
+function parsePW(id, def) {
+  const v=parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? def : v;
+}
+
+function getHeuristicWeights() {
+  return {
+    line:       parsePW('hw-line', 0),
+
+    center:     parsePW('hw-center', 0),
+    corner:     parsePW('hw-corner', 0),
+    sides:      parsePW('hw-sides', 0),
+    mobility:   parsePW('hw-mobility', 0),
+  };
+}
+
+// Score = sum of run_length^2 for each consecutive run of player pieces (longer = better)
+function hLineCompletion(board, player) {
+  let score = 0;
+  for (const line of LINES) {
+    let run = 0;
+    for (const i of line) {
+      if (board[i] === player) run++;
+      else { score += run * run; run = 0; }
+    }
+    score += run * run;
+  }
+  return score;
+}
+
+// 3x3: center=4 (dist 0), edges (1,3,5,7) dist 1, corners (0,2,6,8) dist 2
+const CENTER_DIST = [2,1,2,1,0,1,2,1,2];
+function hCenterProximity(board, player) {
+  let score=0;
+  for (let i=0;i<9;i++) if(board[i]===player) score+=(2-CENTER_DIST[i])/2;
+  return score;
+}
+
+// Min manhattan distance to any corner (0,2,6,8)
+const CORNER_DIST = [0,1,0,1,2,1,0,1,0];
+function hCornerProximity(board, player) {
+  let score=0;
+  for (let i=0;i<9;i++) if(board[i]===player) score+=(2-CORNER_DIST[i])/2;
+  return score;
+}
+
+// Border cells (all except center) have dist 0; center has dist 1
+function hSidesProximity(board, player) {
+  let score=0;
+  for (let i=0;i<9;i++) if(board[i]===player && i!==4) score++;
+  return score;
+}
+
+function hMobility(board, player) {
+  return legalMoves(board).length - legalMoves(board).length; // same pool; always 0
+}
+
+function evaluateBoard(board) {
+  const r=checkWinner(board);
+  if (r && r.winner==='X') return 1000;
+  if (r && r.winner==='O') return -1000;
+  if (r && r.winner==='draw') return 0;
+
+  const hw=getHeuristicWeights();
+  let score=0;
+  if (hw.line)     score+=hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O'));
+  if (hw.center)   score+=hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O'));
+  if (hw.corner)   score+=hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O'));
+  if (hw.sides)    score+=hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O'));
+  if (hw.mobility) score+=hw.mobility*(hMobility(board,'X')-hMobility(board,'O'));
+  return score;
+}
+
+// ─── Game Object ─────────────────────────────────────────────────────────────
+
+const tttGame = {
+  moves(s) { return checkWinner(s.board) ? [] : legalMoves(s.board); },
+  apply(s, m) { return {board:applyMove(s.board,m,s.turn), turn:s.turn==='X'?'O':'X'}; },
+  evaluate(s) { return evaluateBoard(s.board); },
+  isMaximizing(s) { return s.turn==='X'; },
+  isTerminal(s) { return checkWinner(s.board)!==null || legalMoves(s.board).length===0; },
+  simulate(s) {
+    let cur=s;
+    for (let i=0;i<9;i++) {
+      if (checkWinner(cur.board)) break;
+      const mvs=legalMoves(cur.board);
+      if (!mvs.length) break;
+      cur=tttGame.apply(cur, mvs[Math.floor(Math.random()*mvs.length)]);
+    }
+    const r=checkWinner(cur.board);
+    if (!r) return 0.5;
+    return r.winner==='O'?1:r.winner==='X'?0:0.5;
+  },
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+const state = {board:Array(9).fill(null), turn:'X', gameOver:false, aiArrowData:null, winLine:null};
+
+function getState() { return {board:state.board, turn:state.turn}; }
+
+function newGame() {
+  state.board=Array(9).fill(null); state.turn='X';
+  state.gameOver=false; state.aiArrowData=null; state.winLine=null;
+  render();
+  document.getElementById('thinking').textContent='';
+  updateScorePanel();
+  triggerNextPlayer();
+}
+
+// ─── Rendering ───────────────────────────────────────────────────────────────
+
+function render(winLine = state.winLine) {
+  const boardEl=document.getElementById('board');
+  boardEl.innerHTML='';
+  for (let i=0;i<9;i++) {
+    const cell=document.createElement('div');
+    cell.className='cell'+(state.board[i]?' taken':'');
+    if (winLine&&winLine.includes(i)) cell.classList.add('win-cell');
+    if (state.board[i]==='X') { const d=document.createElement('div'); d.className='x-piece'; cell.appendChild(d); }
+    if (state.board[i]==='O') { const d=document.createElement('div'); d.className='o-piece'; cell.appendChild(d); }
+    cell.addEventListener('click', ()=>handleClick(i));
+    boardEl.appendChild(cell);
+  }
+  renderArrows();
+}
+
+function renderArrows() {
+  const svg=document.getElementById('arrow-overlay');
+  svg.innerHTML='';
+  if (!state.aiArrowData || !showAIHints()) return;
+  for (const {move,value,width} of state.aiArrowData) {
+    const col=move%3, row=Math.floor(move/3);
+    const x=col*120+60, y=row*120+60;
+    const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',x); circle.setAttribute('cy',y);
+    circle.setAttribute('r',Math.max(8,width*3));
+    circle.setAttribute('fill',valueToColor(value));
+    circle.setAttribute('opacity','0.65');
+    svg.appendChild(circle);
+  }
+}
+
+function updateScorePanel() {
+  const panel=document.getElementById('score-panel');
+  if (!isMinimaxActive()) { panel.style.display='none'; return; }
+  panel.style.display='block';
+
+  const board=state.board, hw=getHeuristicWeights();
+  const r=checkWinner(board);
+  const sections=[];
+
+  for (const [player, sign, name] of [['X', 1, 'X'], ['O', -1, 'O']]) {
+    if (getPlayerType(player) !== 'minimax') continue;
+    const fmt=v=>(sign*v).toFixed(2);
+    const lines=[];
+    if (r && r.winner==='X')      lines.push('Game over: X wins!');
+    else if (r && r.winner==='O') lines.push('Game over: O wins!');
+    else if (r)                   lines.push('Game over: Draw');
+    if (hw.line)     { const v=hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O')); lines.push(`Line Completion (×${hw.line}): ${fmt(v)}`); }
+    if (hw.center)   { const v=hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O')); lines.push(`Center Proximity (×${hw.center}): ${fmt(v)}`); }
+    if (hw.corner)   { const v=hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O')); lines.push(`Corner Proximity (×${hw.corner}): ${fmt(v)}`); }
+    if (hw.sides)    { const v=hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O')); lines.push(`Sides Proximity (×${hw.sides}): ${fmt(v)}`); }
+    if (hw.mobility) { const v=hw.mobility*hMobility(board,'X'); lines.push(`Mobility (×${hw.mobility}): ${fmt(v)}`); }
+    if (!lines.length) lines.push('No heuristics active');
+    else if (!r) {
+      const total=lines.reduce((acc,l)=>{ const m=l.match(/: ([-\d.]+)/); return acc+(m?parseFloat(m[1]):0); },0);
+      lines.push('─────────────', `Total: ${total.toFixed(2)}`);
+    }
+    lines.push(`<span style="color:var(--color-text-muted);font-size:0.78rem">positive = good for ${name}</span>`);
+    sections.push(`<b style="color:var(--color-text-muted);font-family:var(--font-family);font-size:0.82rem">${name}</b><br>`+lines.join('<br>'));
+  }
+  document.getElementById('score-breakdown').innerHTML=sections.join('<br><br>');
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+
+function triggerNextPlayer() {
+  if (state.gameOver) return;
+  const type = getPlayerType(state.turn);
+  if (type === 'human') {
+    document.getElementById('status-box').textContent = `${state.turn}'s turn`;
+    return;
+  }
+  document.getElementById('status-box').textContent = `${state.turn} thinking...`;
+  runAI(tttGame, getState(), ({move, arrowData}) => {
+    state.aiArrowData = arrowData;
+    if (move === null) return;
+    state.board = applyMove(state.board, move, state.turn);
+    state.turn = state.turn === 'X' ? 'O' : 'X';
+    const winner = checkWinner(state.board);
+    render(winner ? winner.line : null);
+    updateScorePanel();
+    if (winner) { endGame(winner); return; }
+    triggerNextPlayer();
+  });
+}
+
+function handleClick(idx) {
+  if (state.gameOver || state.board[idx] !== null) return;
+  if (getPlayerType(state.turn) !== 'human') return;
+  state.aiArrowData = null;
+  state.board = applyMove(state.board, idx, state.turn);
+  state.turn = state.turn === 'X' ? 'O' : 'X';
+  render();
+  updateScorePanel();
+  const result = checkWinner(state.board);
+  if (result) { endGame(result); return; }
+  triggerNextPlayer();
+}
+
+function endGame(result) {
+  state.gameOver=true;
+  state.winLine=result.line;
+  document.getElementById('status-box').textContent=
+    result.winner==='draw' ? 'Draw!' : `${result.winner} wins!`;
+  render(result.line);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+const tttExtraSettings = `
+  <hr style="border-color:var(--color-border); margin:8px 0;">
+  <div style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:8px;">Heuristic Weights <span style="font-size:0.75rem;">(0 = off)</span></div>
+  <div class="piece-weight-row"><span data-tooltip="Scans all board lines and sums run² for each consecutive run of the player's pieces. A run of 2 = 4 pts, run of 3 = 9 pts. Longer runs score exponentially more.">Line Completion</span><input type="number" id="hw-line" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the Manhattan distance to the board centre and maxD is the maximum such distance. Centre = 1, furthest point = 0.">Center Proximity</span><input type="number" id="hw-center" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the minimum Manhattan distance to any corner and maxD is the board's max distance. On a corner = 1, furthest cell ≈ 0.">Corner Proximity</span><input type="number" id="hw-corner" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores (maxD − d)/maxD, where d is the minimum distance to any board edge. Border pieces score 1, the centre scores 0.">Sides Proximity</span><input type="number" id="hw-sides" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's legal move count minus the opponent's. Always 0 in placement games where both players share the same pool of empty cells.">Mobility</span><input type="number" id="hw-mobility" value="0" min="0" step="1"></div>
+`;
+
+buildSidebar({
+  extraSettings: tttExtraSettings,
+  mmDepthMax: 9, mmDepthDefault: 9,
+  uctSimsDefault: 500,
+  p1Label: 'X', p2Label: 'O',
+  extraPanels: `<div class="panel"><h3>Rules</h3><div style="font-size:0.82rem;color:var(--color-text-muted);line-height:1.6;">
+    <b>Board:</b> 3×3 grid.<br>
+    <b>Play:</b> Players alternate placing their piece on any empty square.<br>
+    <b>Win:</b> First to get 3 in a row (row, column, or diagonal) wins.<br>
+    <b>Draw:</b> If the board fills with no winner, the game is a draw.
+  </div></div>`,
+});
+
+setupSharedUI({
+  onAlgoChange: ()=>updateScorePanel(),
+  onNewGame: newGame,
+  onRender: render,
+  onPlayerChange: triggerNextPlayer,
+});
+
+newGame();
+</script>
+</body>
+</html>

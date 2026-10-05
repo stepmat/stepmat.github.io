@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ant Colony Optimization</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-family);
+    background: var(--color-bg-page);
+    color: var(--color-text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-xl) 16px;
+    gap: var(--space-lg);
+  }
+
+  h1 {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+    background: var(--gradient-title);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-sub { font-size: var(--font-size-base); color: var(--color-text-muted); text-align: center; }
+  .header-credit { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+  .header-credit a { color: var(--color-primary); text-decoration: none; }
+  .header-credit a:hover { text-decoration: underline; }
+
+  .container {
+    max-width: 1100px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .panel h2 {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    color: var(--color-text);
+  }
+
+  .row { display: flex; gap: var(--space-xl); flex-wrap: wrap; align-items: stretch; }
+  .row > .flex-1 { flex: 1 1 320px; }
+
+  .field-row { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+  .field { flex: 1 1 100px; display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+  }
+  .field input {
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    color: var(--color-text);
+    font-size: var(--font-size-ui);
+    outline: none;
+    width: 100%;
+  }
+  .field input:focus { border-color: var(--color-primary); }
+
+  .btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: var(--font-size-ui);
+    font-weight: var(--font-weight-semi);
+    cursor: pointer;
+    transition: var(--transition-fast);
+  }
+  .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
+  .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+  .btn-primary:disabled { background: var(--color-disabled-bg); color: var(--color-disabled-text); cursor: not-allowed; }
+  .btn-secondary { background: var(--color-bg-hover); color: var(--color-text); }
+  .btn-secondary:hover:not(:disabled) { background: var(--color-bg-hover-dark); }
+  .btn-secondary:disabled { color: var(--color-text-muted); cursor: not-allowed; opacity: 0.6; }
+
+  .btn-row { display: flex; gap: var(--space-sm); }
+  .btn-row .btn { flex: 1; }
+
+  .divider { margin: 2px 0; border-bottom: 1px solid var(--color-border); }
+
+  /* ── Checkboxes ── */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+  .checkbox-row input { accent-color: var(--color-primary); }
+  .checkbox-row label { cursor: pointer; }
+
+  /* ── Speed control ── */
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--font-size-base);
+    color: var(--color-text-muted);
+  }
+  .speed-row input[type=range] { flex: 1; accent-color: var(--color-accent); }
+
+  /* ── Canvas wrapper ── */
+  .canvas-wrap {
+    position: relative;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    flex: 1;
+    min-height: 400px;
+  }
+  #stage { display: block; width: 100%; height: 100%; }
+
+  /* ── Stats ── */
+  .best-line { font-size: var(--font-size-base); }
+  .best-line .label {
+    display: inline-block;
+    min-width: 90px;
+    font-weight: var(--font-weight-semi);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+    margin-right: var(--space-sm);
+  }
+
+  /* ── Explanation section ── */
+  #explanation h2 { margin-top: var(--space-md); }
+  #explanation h2:first-child { margin-top: 0; }
+  #explanation h3 {
+    font-size: var(--font-size-ui);
+    font-weight: var(--font-weight-semi);
+    color: var(--color-text);
+    margin-top: var(--space-sm);
+  }
+  #explanation p, #explanation li {
+    line-height: 1.6;
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+  #explanation ol { padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .formula {
+    font-family: "Cambria Math", Cambria, Georgia, serif;
+    font-size: 15px;
+    text-align: center;
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+  }
+  table.var-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-base);
+  }
+  table.var-table th, table.var-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.var-table th {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semi);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-label);
+    font-size: var(--font-size-sm);
+  }
+  table.var-table td:first-child { white-space: nowrap; font-weight: var(--font-weight-semi); }
+  table.var-table td:nth-child(2) { white-space: nowrap; color: var(--color-text-muted); font-family: monospace; }
+
+  canvas { max-width: 100%; }
+
+  @media (max-width: 768px) {
+    .row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Ant Colony Optimization</h1>
+<div class="header-sub">A visualisation of the Ant Colony Optimization (ACO) algorithm solving the travelling salesman problem</div>
+<div class="header-credit">Adapted from <a href="https://github.com/poolik/visual-aco" target="_blank" rel="noopener noreferrer">poolik/visual-aco</a></div>
+
+<div class="container">
+
+  <div class="row">
+    <div class="panel flex-1" style="flex: 2 1 600px;">
+      <h2>Visualisation</h2>
+      <div class="canvas-wrap">
+        <canvas id="stage"></canvas>
+      </div>
+    </div>
+
+    <div class="panel" style="flex: 1 1 280px;">
+      <h2>Setup</h2>
+      <div class="field-row">
+        <div class="field"><label for="nrOfCities"># of cities</label><input type="number" id="nrOfCities" min="1" max="1000" value="10"></div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" id="generateBtn" style="width:100%;">Generate</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Parameters</h2>
+      <div class="field-row">
+        <div class="field"><label for="evaporation">Evaporation</label><input type="number" id="evaporation" step="any" value="0.7"></div>
+        <div class="field"><label for="q">Q</label><input type="number" id="q" step="1" value="100"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="alpha">Alpha</label><input type="number" id="alpha" step="any" min="0" value="1"></div>
+        <div class="field"><label for="beta">Beta</label><input type="number" id="beta" step="any" min="0" value="5"></div>
+      </div>
+      <div class="field-row">
+        <div class="field" title="% of ants from the nr of cities"><label for="antPercentage">% of ants</label><input type="number" id="antPercentage" step="1" min="1" max="100" value="80"></div>
+        <div class="field"><label for="nrOfIterations">Iterations</label><input type="number" id="nrOfIterations" step="1" min="1" value="20"></div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="runStopBtn" disabled style="width:100%;">Run</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Playback</h2>
+      <div class="checkbox-row" title="Starting from next iteration will either hide or show the ants">
+        <input type="checkbox" id="skipDrawingAnts"><label for="skipDrawingAnts">Skip drawing ants</label>
+      </div>
+      <div class="checkbox-row" title="Starting from next iteration will either hide or show the pheromone trails">
+        <input type="checkbox" id="skipDrawingTrails"><label for="skipDrawingTrails">Skip drawing trails</label>
+      </div>
+      <div class="speed-row">
+        Slow
+        <input type="range" id="speed" min="1" max="20" step="1" value="17">
+        Fast
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>Stats</h2>
+      <div class="best-line"><span class="label">Iteration</span><span id="iteration">0</span></div>
+      <div class="best-line"><span class="label">Best tour</span><span id="bestTourLength">NaN</span></div>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel" style="display:none;">
+    <h2>Results</h2>
+    <div style="height:220px;">
+      <canvas id="fitnessChart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel" id="explanation">
+    <h2>The Problem: Travelling Salesman</h2>
+    <p>
+      The <strong>Travelling Salesman Problem (TSP)</strong> asks: given a set of cities and the distances
+      between them, what is the shortest possible route that visits every city exactly once and returns to
+      the starting city? It's a classic <em>NP-hard</em> problem — as the number of cities grows, the number
+      of possible routes explodes factorially, so checking every possibility quickly becomes impossible.
+      Instead, we need algorithms that find very good (though not necessarily perfect) solutions in a
+      reasonable amount of time. Ant Colony Optimization is one such approach.
+    </p>
+
+    <h2>The Algorithm: Ant Colony Optimization</h2>
+    <p>
+      Ant Colony Optimization (ACO) doesn't refer to one specific algorithm, but to a family of algorithms
+      inspired by how real ants find short paths between their colony and food. As ants move, they lay down
+      a chemical called <strong>pheromone</strong>, and tend to prefer paths that already have more of it.
+      Because shorter paths get walked (and re-walked) faster than longer ones, pheromone builds up on them
+      more quickly — while pheromone on every path also slowly <strong>evaporates</strong> over time. This
+      creates a feedback loop: good, short paths get reinforced, and poor, long paths fade away.
+    </p>
+    <p>
+      This simulation implements <strong>Ant System</strong>, the original ACO algorithm proposed by Marco
+      Dorigo in 1991, applied to the TSP. Artificial ants differ from real ones in that they have memory (they
+      remember which cities they've already visited), they aren't blind (they can sense the distance to each
+      city), and they operate in discrete time steps &mdash; one city visited per step. Each full pass, where
+      every ant builds a complete tour, is one <strong>iteration</strong>.
+    </p>
+
+    <h3>How one iteration works</h3>
+    <ol>
+      <li>Every ant is placed on a random starting city.</li>
+      <li>Each ant repeatedly picks the next unvisited city to move to. The probability of picking a
+        particular city is higher when there is more pheromone on that edge, and higher when the city is
+        closer &mdash; balanced by the <em>alpha</em> and <em>beta</em> parameters described below.</li>
+      <li>Once every ant has visited all cities (and implicitly returns to its starting city), the length of
+        each ant's tour is calculated.</li>
+      <li>The shortest tour found this iteration is compared against the best tour found so far.</li>
+      <li>Pheromone on every edge evaporates a little, then each ant deposits fresh pheromone along the edges
+        of the tour it just walked &mdash; shorter tours deposit proportionally more pheromone per edge.</li>
+      <li>The ants' tours are cleared and the process repeats for the next iteration.</li>
+    </ol>
+    <p>
+      Over many iterations, pheromone accumulates on the edges that tend to appear in short tours, steering
+      later ants towards increasingly better routes.
+    </p>
+
+    <h3>The pheromone update formula</h3>
+    <p>
+      For each edge between city <em>i</em> and city <em>j</em>, the pheromone level after evaporation and
+      deposit is:
+    </p>
+    <div class="formula">
+      τ<sub>ij</sub>(new) = ρ · τ<sub>ij</sub>(old) + Δτ<sub>ij</sub>
+      <br>
+      Δτ<sub>ij</sub> = sum over all ants of (Q / L<sub>k</sub>), for every ant <em>k</em> whose tour used edge <em>ij</em>
+    </div>
+    <p>where ρ is the evaporation rate, Q is the pheromone deposit constant, and L<sub>k</sub> is the total length of ant k's tour.</p>
+
+    <h3>The city-selection formula</h3>
+    <p>
+      When an ant standing at city <em>i</em> chooses its next city <em>j</em> from the remaining unvisited
+      cities, the probability of choosing <em>j</em> is:
+    </p>
+    <div class="formula">
+      p<sub>ij</sub> = ( τ<sub>ij</sub><sup>α</sup> · η<sub>ij</sub><sup>β</sup> )
+      &nbsp;/&nbsp;
+      Σ<sub>k∈unvisited</sub> ( τ<sub>ik</sub><sup>α</sup> · η<sub>ik</sub><sup>β</sup> )
+    </div>
+    <p>where η<sub>ij</sub> = 1 / d<sub>ij</sub> (the inverse of the distance between cities i and j), α controls
+      how much weight is given to pheromone, and β controls how much weight is given to proximity.</p>
+
+    <h2>Meaning of each variable / control</h2>
+    <table class="var-table">
+      <thead>
+        <tr><th>Control</th><th>Symbol</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td># of cities</td><td>n</td>
+          <td>How many cities to randomly place on the canvas when you click <strong>Generate</strong>. This defines the size of the TSP instance to solve.</td>
+        </tr>
+        <tr>
+          <td>Evaporation</td><td>ρ (rho)</td>
+          <td>The fraction of pheromone that <em>remains</em> on each edge after every iteration (e.g. 0.7 means 30% evaporates each iteration). Lower values make old trails disappear faster, encouraging more exploration; higher values make the colony converge on a route more quickly but risk settling on a mediocre one.</td>
+        </tr>
+        <tr>
+          <td>Q</td><td>Q</td>
+          <td>A constant controlling how much pheromone each ant deposits on the edges of its tour. The amount added to each edge of an ant's tour is Q divided by that ant's total tour length, so shorter tours always deposit more pheromone.</td>
+        </tr>
+        <tr>
+          <td>Alpha</td><td>α (alpha)</td>
+          <td>How strongly existing pheromone levels influence an ant's choice of next city. α = 0 would make ants ignore pheromone entirely and rely only on distance.</td>
+        </tr>
+        <tr>
+          <td>Beta</td><td>β (beta)</td>
+          <td>How strongly the distance to a candidate city influences an ant's choice (nearby cities are preferred). β = 0 would make ants ignore distance and rely only on pheromone.</td>
+        </tr>
+        <tr>
+          <td>% of ants</td><td>m / n</td>
+          <td>The number of ants used, expressed as a percentage of the number of cities. More ants explore more of the search space per iteration but cost more to simulate.</td>
+        </tr>
+        <tr>
+          <td>Iterations</td><td>&mdash;</td>
+          <td>How many full rounds of "all ants build a tour, then pheromone is updated" the simulation will run before stopping automatically.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- DOM ----------
+  var canvas = document.getElementById('stage');
+  var ctx = canvas.getContext('2d');
+  var nrOfCitiesInput = document.getElementById('nrOfCities');
+  var evaporationInput = document.getElementById('evaporation');
+  var qInput = document.getElementById('q');
+  var alphaInput = document.getElementById('alpha');
+  var betaInput = document.getElementById('beta');
+  var antPercentageInput = document.getElementById('antPercentage');
+  var nrOfIterationsInput = document.getElementById('nrOfIterations');
+  var speedInput = document.getElementById('speed');
+  var skipDrawingAntsInput = document.getElementById('skipDrawingAnts');
+  var skipDrawingTrailsInput = document.getElementById('skipDrawingTrails');
+  var generateBtn = document.getElementById('generateBtn');
+  var runStopBtn = document.getElementById('runStopBtn');
+  var iterationSpan = document.getElementById('iteration');
+  var bestTourLengthSpan = document.getElementById('bestTourLength');
+  var resultsPanel = document.getElementById('resultsPanel');
+
+  // ---------- Results chart ----------
+  // Chart.js comes from a CDN. If it didn't load, the visualisation still works; only
+  // the results chart is replaced by a message.
+  var fitnessChart = null;
+  if (!window.Chart) {
+    document.getElementById('fitnessChart').parentNode.innerHTML = '<p style="margin:0; color:var(--color-text-muted);">This chart couldn\'t be shown because its charting library (Chart.js) failed to load. Check your internet connection and reload the page.</p>';
+  } else fitnessChart = new Chart(document.getElementById('fitnessChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Best tour length',
+        data: [],
+        borderColor: '#7c3aed',
+        backgroundColor: '#7c3aed',
+        tension: 0.2,
+        pointRadius: 0,
+      }],
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            label: function (context) { return context.parsed.y.toFixed(2); },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: 'Iteration' } },
+        y: {
+          title: { display: true, text: 'Best tour length' },
+          ticks: { callback: function (value) { return Number(value).toFixed(2); } },
+        },
+      },
+    },
+  });
+
+  function resetChart() {
+    if (!fitnessChart) return;
+    fitnessChart.data.labels = [];
+    fitnessChart.data.datasets[0].data = [];
+    fitnessChart.update();
+  }
+
+  function pushChartPoint(iteration, length) {
+    if (!fitnessChart) return;
+    fitnessChart.data.labels.push(iteration);
+    fitnessChart.data.datasets[0].data.push(length);
+    fitnessChart.update();
+  }
+
+  function resizeCanvas() {
+    var rect = canvas.parentNode.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+  // Setting canvas.width/height clears the canvas, so it must always be
+  // followed by a redraw -- otherwise a resize blanks the visualisation
+  // until the next Generate/Run.
+  window.addEventListener('resize', function () { resizeCanvas(); draw(); });
+  resizeCanvas();
+
+  // ---------- State ----------
+  var cities = [];          // {id, x, y}
+  var ants = [];            // {id, x, y, tour: [], visited: []}
+  var trails = [];          // pheromone matrix
+  var distances = [];       // distance matrix
+  var bestTour = undefined; // {tour: [ids], length}
+  var isRunning = false;
+  var iterationCount = 0;
+  var animationSpeed = Number(speedInput.value);
+  var runToken = 0; // incremented on stop to abort in-flight loops
+
+  // ---------- Helpers ----------
+  function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function distanceBetween(a, b) {
+    var dx = a.x - b.x, dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function getScaleAdjustedSettings() {
+    var n = cities.length || Number(nrOfCitiesInput.value);
+    if (n < 50) return { radius: 6, antRadius: 5 };
+    if (n < 250) return { radius: 3.5, antRadius: 3 };
+    return { radius: 2, antRadius: 2 };
+  }
+
+  function calculateDistances() {
+    var n = cities.length;
+    var matrix = new Array(n);
+    for (var i = 0; i < n; i++) {
+      matrix[i] = new Array(n);
+      for (var j = 0; j < n; j++) {
+        matrix[i][j] = distanceBetween(cities[i], cities[j]);
+      }
+    }
+    return matrix;
+  }
+
+  function initTrails(n, initial) {
+    var matrix = new Array(n);
+    for (var i = 0; i < n; i++) {
+      matrix[i] = new Array(n).fill(initial);
+    }
+    return matrix;
+  }
+
+  function tourLength(tourIds) {
+    var n = tourIds.length;
+    var length = distances[tourIds[n - 1]][tourIds[0]];
+    for (var i = 0; i < n - 1; i++) {
+      length += distances[tourIds[i]][tourIds[i + 1]];
+    }
+    return length;
+  }
+
+  // ---------- Generate cities ----------
+  function generate() {
+    if (isRunning) stop();
+    var n = Math.max(1, Math.min(1000, Number(nrOfCitiesInput.value) || 0));
+    nrOfCitiesInput.value = n;
+    bestTour = undefined;
+    bestTourLengthSpan.textContent = 'NaN';
+    iterationCount = 0;
+    iterationSpan.textContent = '0';
+    resetChart();
+    resultsPanel.style.display = 'none';
+    ants = [];
+    cities = [];
+    trails = []; // the old matrix is sized for the previous cities
+    invalidateTrailLayer();
+    var radius = getScaleAdjustedSettings().radius;
+    var w = canvas.width, h = canvas.height;
+    for (var i = 0; i < n; i++) {
+      var x = randomInt(radius, w - radius);
+      var y = randomInt(radius, h - radius);
+      cities.push({ id: i, x: x, y: y });
+    }
+    runStopBtn.disabled = false;
+    draw();
+  }
+
+  // ---------- ACO algorithm (Ant System) ----------
+  function selectNextTown(ant, alpha, beta) {
+    var current = ant.tour[ant.tour.length - 1];
+    var n = cities.length;
+    var denominator = 0.0;
+    var next;
+    for (next = 0; next < n; next++) {
+      if (!ant.visited[next]) {
+        denominator += Math.pow(trails[current][next], alpha) * Math.pow(1.0 / distances[current][next], beta);
+      }
+    }
+    if (denominator > Number.MAX_VALUE) denominator = Number.MAX_VALUE;
+
+    var random = Math.random();
+    var total = 0;
+    for (var j = 0; j < n; j++) {
+      if (ant.visited[j]) continue;
+      var numerator = Math.pow(trails[current][j], alpha) * Math.pow(1.0 / distances[current][j], beta);
+      var probability = denominator === 0 ? 0 : numerator / denominator;
+      total += probability;
+      if (total >= random) return j;
+    }
+    // fallback: pick first unvisited (guards against fp rounding)
+    for (var k = 0; k < n; k++) {
+      if (!ant.visited[k]) return k;
+    }
+    return undefined;
+  }
+
+  function visitTown(ant, cityId) {
+    ant.tour.push(cityId);
+    ant.visited[cityId] = true;
+    ant.x = cities[cityId].x;
+    ant.y = cities[cityId].y;
+  }
+
+  function setupAnts(nrOfAnts) {
+    ants = [];
+    for (var i = 0; i < nrOfAnts; i++) {
+      var ant = { id: i, x: 0, y: 0, tour: [], visited: new Array(cities.length).fill(false) };
+      var startCity = randomInt(0, cities.length - 1);
+      visitTown(ant, startCity);
+      ants.push(ant);
+    }
+  }
+
+  function animateMove(ant, dest, token) {
+    return new Promise(function (resolve) {
+      function step() {
+        if (token !== runToken) { resolve(); return; }
+        var dx = dest.x - ant.x, dy = dest.y - ant.y;
+        var dist = Math.hypot(dx, dy);
+        if (dist < animationSpeed) {
+          ant.x = dest.x; ant.y = dest.y;
+          resolve();
+        } else {
+          ant.x += animationSpeed * dx / dist;
+          ant.y += animationSpeed * dy / dist;
+          requestAnimationFrame(step);
+        }
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  function runAntTour(ant, alpha, beta, token) {
+    return new Promise(function (resolveTour) {
+      var stepsLeft = cities.length - 1;
+      function nextStep() {
+        if (token !== runToken) { resolveTour(); return; }
+        if (stepsLeft <= 0) { resolveTour(); return; }
+        stepsLeft--;
+        var nextId = selectNextTown(ant, alpha, beta);
+        if (nextId === undefined) nextId = ant.tour[0];
+        if (skipDrawingAntsInput.checked) {
+          visitTown(ant, nextId);
+          nextStep();
+        } else {
+          animateMove(ant, cities[nextId], token).then(function () {
+            visitTown(ant, nextId);
+            nextStep();
+          });
+        }
+      }
+      nextStep();
+    });
+  }
+
+  function updateTrails(evaporation, Q) {
+    var n = cities.length;
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        trails[i][j] *= evaporation;
+      }
+    }
+    ants.forEach(function (ant) {
+      var contribution = Q / tourLength(ant.tour);
+      for (var i = 0; i < n - 1; i++) {
+        trails[ant.tour[i]][ant.tour[i + 1]] += contribution;
+      }
+      trails[ant.tour[n - 1]][ant.tour[0]] += contribution;
+    });
+    invalidateTrailLayer();
+  }
+
+  function getIterationBestTour() {
+    var bestLength = Number.MAX_VALUE;
+    var best;
+    ants.forEach(function (ant) {
+      var len = tourLength(ant.tour);
+      if (len < bestLength) { bestLength = len; best = ant.tour; }
+    });
+    return { tour: best.slice(0), length: bestLength };
+  }
+
+  // ---------- Drawing ----------
+  // Trails only change once per iteration, but draw() runs every animation frame and
+  // drawing them is O(n^2). Render them to an offscreen layer and reuse it until they change.
+  var trailLayer = document.createElement('canvas');
+  var trailLayerValid = false;
+
+  function invalidateTrailLayer() { trailLayerValid = false; }
+
+  function renderTrailLayer() {
+    trailLayer.width = canvas.width;
+    trailLayer.height = canvas.height;
+    var tctx = trailLayer.getContext('2d');
+    var n = cities.length;
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var pheromone = trails[i][j];
+        if (pheromone <= 0.001) continue;
+        tctx.beginPath();
+        tctx.moveTo(cities[i].x, cities[i].y);
+        tctx.lineTo(cities[j].x, cities[j].y);
+        tctx.strokeStyle = '#64748b';
+        tctx.globalAlpha = Math.max(0, Math.min(1, pheromone));
+        tctx.lineWidth = 1;
+        tctx.stroke();
+      }
+    }
+    trailLayerValid = true;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var settings = getScaleAdjustedSettings();
+
+    // trails
+    if (!skipDrawingTrailsInput.checked && trails.length) {
+      if (!trailLayerValid || trailLayer.width !== canvas.width || trailLayer.height !== canvas.height) renderTrailLayer();
+      ctx.drawImage(trailLayer, 0, 0);
+    }
+
+    // best tour
+    if (bestTour) {
+      ctx.beginPath();
+      var t = bestTour.tour;
+      ctx.moveTo(cities[t[t.length - 1]].x, cities[t[t.length - 1]].y);
+      for (var k = 0; k < t.length; k++) {
+        ctx.lineTo(cities[t[k]].x, cities[t[k]].y);
+      }
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+    }
+
+    // cities
+    ctx.fillStyle = '#000000';
+    cities.forEach(function (c) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, settings.radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // ants
+    if (!skipDrawingAntsInput.checked) {
+      ctx.fillStyle = '#2563eb';
+      ants.forEach(function (ant) {
+        ctx.beginPath();
+        ctx.arc(ant.x, ant.y, settings.antRadius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+
+  function renderLoop() {
+    draw();
+    if (isRunning) requestAnimationFrame(renderLoop);
+  }
+
+  // ---------- Run / Stop ----------
+  function stop() {
+    isRunning = false;
+    runToken++;
+    runStopBtn.textContent = 'Run';
+    draw();
+  }
+
+  function run() {
+    var nrOfCities = cities.length;
+    if (nrOfCities === 0) return;
+    var evaporation = Number(evaporationInput.value);
+    var Q = Number(qInput.value);
+    var alpha = Number(alphaInput.value);
+    var beta = Number(betaInput.value);
+    var antPercentage = Number(antPercentageInput.value);
+    var nrOfIterations = Number(nrOfIterationsInput.value);
+    var nrOfAnts = Math.max(1, Math.round(nrOfCities * (antPercentage / 100)));
+
+    distances = calculateDistances();
+    trails = initTrails(nrOfCities, 0.1);
+    invalidateTrailLayer();
+    bestTour = undefined;
+    bestTourLengthSpan.textContent = 'NaN';
+    iterationCount = 0;
+    iterationSpan.textContent = '0';
+    resetChart();
+    resultsPanel.style.display = '';
+
+    isRunning = true;
+    runToken++;
+    var token = runToken;
+    runStopBtn.textContent = 'Stop';
+    requestAnimationFrame(renderLoop);
+
+    function iterate() {
+      if (token !== runToken) return; // stopped
+      if (iterationCount >= nrOfIterations) { stop(); return; }
+
+      setupAnts(nrOfAnts);
+      var promises = ants.map(function (ant) {
+        return runAntTour(ant, alpha, beta, token);
+      });
+      Promise.all(promises).then(function () {
+        if (token !== runToken) return; // stopped mid-flight
+        updateTrails(evaporation, Q);
+        var iterBest = getIterationBestTour();
+        if (!bestTour || iterBest.length < bestTour.length) {
+          bestTour = iterBest;
+          bestTourLengthSpan.textContent = bestTour.length.toFixed(2);
+        }
+        iterationCount++;
+        iterationSpan.textContent = iterationCount;
+        pushChartPoint(iterationCount, bestTour.length);
+        setTimeout(iterate, 0);
+      });
+    }
+    iterate();
+  }
+
+  // ---------- Events ----------
+  generateBtn.addEventListener('click', generate);
+  runStopBtn.addEventListener('click', function () {
+    if (isRunning) stop(); else run();
+  });
+  speedInput.addEventListener('input', function () {
+    animationSpeed = Number(speedInput.value);
+  });
+
+  // initial draw
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fuzzy Logic Simulator — Temperature &amp; Humidity → Air Conditioning</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <header class="app__header">
+    <h1>Fuzzy Logic Simulator</h1>
+    <p class="overview">This program simulates a fuzzy logic controller for an air conditioner. It takes two inputs (Temperature and Humidity) and works out the AC's target temperature.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel__heading">
+      <h2>1. Fuzzification — Temperature</h2>
+      <button id="resetInputShapes" class="reset-btn" type="button">Reset shapes</button>
+    </div>
+    <p class="panel__hint">Set membership degree of the input temperature in each linguistic term (Cold, Warm and Hot).</p>
+    <div id="fuzzifyChart" class="chart"></div>
+    <div id="fuzzifyDegrees" class="degree-row"></div>
+    <div class="control-panel__group">
+      <label for="tempSlider" class="control-panel__label">
+        Temperature: <span id="tempValue">20.0</span> °C
+      </label>
+      <input type="range" id="tempSlider" min="0" max="40" value="20" step="0.1" />
+      <div class="control-panel__range">
+        <span>0 °C</span>
+        <span>40 °C</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel__heading">
+      <h2>2. Fuzzification — Humidity</h2>
+      <button id="resetHumidityShapes" class="reset-btn" type="button">Reset shapes</button>
+    </div>
+    <p class="panel__hint">Set membership degree of the input humidity in each linguistic term (Dry, Comfortable and Humid).</p>
+    <div id="humidityChart" class="chart"></div>
+    <div id="humidityDegrees" class="degree-row"></div>
+    <div class="control-panel__group">
+      <label for="humiditySlider" class="control-panel__label">
+        Humidity: <span id="humidityValue">50.0</span> %
+      </label>
+      <input type="range" id="humiditySlider" min="0" max="100" value="50" step="0.1" />
+      <div class="control-panel__range">
+        <span>0 %</span>
+        <span>100 %</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>3. Rule Evaluation</h2>
+    <p class="panel__hint">Each combination of Temperature and Humidity has a corresponding rule for the desired air-con mode (Cooling or Heating). Each rule outputs its membership in this desired mode, equal to the minimum (AND) of its temperature and humidity set membership degrees.</p>
+    <div id="ruleMatrixWrap" class="rule-matrix-wrap"></div>
+
+    <div class="panel__subsection">
+      <h3 class="panel__subheading">Total membership per mode (Cooling and Heating)</h3>
+      <p class="panel__hint">Each total is the maximum (OR) output value among the rules pointing to that mode.</p>
+      <div id="ruleTotals" class="degree-row"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel__heading">
+      <h2>4. Aggregation &amp; Defuzzification</h2>
+      <button id="resetACShapes" class="reset-btn" type="button">Reset shapes</button>
+    </div>
+    <p class="panel__hint">The Cooling/Heating total membership values are reduced to a single air-con target temperature via the centroid method.</p>
+    <div id="acChart" class="chart"></div>
+    <div class="result">
+      <div class="result__value">
+        <span id="acTempValue">0</span><span class="unit">°C</span>
+        <div class="result__label">AC target temp</div>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="script.js"></script>
+</body>
+</html>

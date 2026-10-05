@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alquerque vs AI</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  #board-wrap { position: relative; display: inline-block; }
+  #board-svg { display: block; cursor: default; border: 1px solid var(--color-border); border-radius: 6px; }
+  .point { cursor: pointer; }
+  .point:hover { opacity: 0.7; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">← Games</a>
+  <h1>◉ Alquerque</h1>
+</div>
+<div class="main">
+  <div id="board-wrap">
+    <svg id="board-svg"></svg>
+  </div>
+  <div id="sidebar" class="sidebar"></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SIZE = 5;
+const CELL = 72;
+const PAD  = 44;
+const SVG_SIZE = PAD * 2 + CELL * (SIZE - 1);
+// Moves (by either player) after which a game with no winner is declared a draw.
+// Without it, AI-vs-AI games easily shuffle back and forth forever.
+const MAX_MOVES = 200;
+
+function idx(r, c) { return r * SIZE + c; }
+function pos(i)    { return {r: Math.floor(i / SIZE), c: i % SIZE}; }
+
+// ─── Adjacency ───────────────────────────────────────────────────────────────
+// All points connect orthogonally; points where (r+c) is even also connect diagonally.
+
+function getAdj(r, c) {
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+  if ((r + c) % 2 === 0) dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
+  return dirs
+    .map(([dr, dc]) => [r + dr, c + dc])
+    .filter(([nr, nc]) => nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE);
+}
+
+// ─── Starting Position ────────────────────────────────────────────────────────
+// Rows 0-1: O, Row 2: O O . X X, Rows 3-4: X
+
+function startBoard() {
+  const b = Array(SIZE * SIZE).fill(null);
+  for (let i = 0; i < 10; i++) b[i] = 'O';
+  b[10] = 'O'; b[11] = 'O'; b[12] = null; b[13] = 'X'; b[14] = 'X';
+  for (let i = 15; i < 25; i++) b[i] = 'X';
+  return b;
+}
+
+// ─── Move Generation ─────────────────────────────────────────────────────────
+// A move is an array of board indices: [start, landing]
+// Captures are optional and single-jump only.
+
+function legalMoves(board, player) {
+  const opp = player === 'X' ? 'O' : 'X';
+  const moves = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (board[idx(r, c)] !== player) continue;
+      // Normal moves
+      for (const [nr, nc] of getAdj(r, c))
+        if (board[idx(nr, nc)] === null)
+          moves.push([idx(r, c), idx(nr, nc)]);
+      // Single captures
+      for (const [nr, nc] of getAdj(r, c)) {
+        if (board[idx(nr, nc)] !== opp) continue;
+        const lr = r + (nr - r) * 2, lc = c + (nc - c) * 2;
+        if (lr < 0 || lr >= SIZE || lc < 0 || lc >= SIZE) continue;
+        if (board[idx(lr, lc)] === null)
+          moves.push([idx(r, c), idx(lr, lc)]);
+      }
+    }
+  }
+  return moves;
+}
+
+function applyMove(board, move, player) {
+  const b = [...board];
+  b[move[0]] = null;
+  for (let i = 1; i < move.length; i++) {
+    const {r: r0, c: c0} = pos(move[i - 1]);
+    const {r: r1, c: c1} = pos(move[i]);
+    const dr = r1 - r0, dc = c1 - c0;
+    if (Math.abs(dr) >= 2 || Math.abs(dc) >= 2)
+      b[idx(r0 + dr / 2, c0 + dc / 2)] = null;
+  }
+  b[move[move.length - 1]] = player;
+  return b;
+}
+
+// ─── Win Condition ────────────────────────────────────────────────────────────
+
+function checkWinner(board, turn) {
+  const xCount = board.filter(c => c === 'X').length;
+  const oCount = board.filter(c => c === 'O').length;
+  if (oCount === 0) return 'X';
+  if (xCount === 0) return 'O';
+  if (!legalMoves(board, turn).length) return turn === 'X' ? 'O' : 'X';
+  return null;
+}
+
+// ─── Heuristics ───────────────────────────────────────────────────────────────
+
+function parsePW(id, def) {
+  const v = parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? def : v;
+}
+
+function getHeuristicWeights() {
+  return {
+    material: parsePW('hw-material', 0),
+    line:     parsePW('hw-line', 0),
+    center:   parsePW('hw-center', 0),
+    corner:   parsePW('hw-corner', 0),
+    sides:    parsePW('hw-sides', 0),
+    mobility: parsePW('hw-mobility', 0),
+  };
+}
+
+// Lines: rows, cols, and the two diagonal families (only between even-sum points)
+function buildLines() {
+  const lines = [];
+  for (let r = 0; r < SIZE; r++) {
+    lines.push(Array.from({length: SIZE}, (_, c) => idx(r, c)));
+  }
+  for (let c = 0; c < SIZE; c++) {
+    lines.push(Array.from({length: SIZE}, (_, r) => idx(r, c)));
+  }
+  // SW-NE and NW-SE diagonals (only through even-sum cells)
+  for (let start = 0; start < SIZE * SIZE; start++) {
+    const {r: sr, c: sc} = pos(start);
+    if ((sr + sc) % 2 !== 0) continue;
+    for (const [dr, dc] of [[1,1],[1,-1]]) {
+      if (sr - dr >= 0 && sc - dc >= 0 && sc - dc < SIZE &&
+          (sr - dr + sc - dc) % 2 === 0) continue; // not the start
+      const line = [];
+      let r = sr, c = sc;
+      while (r >= 0 && r < SIZE && c >= 0 && c < SIZE) {
+        line.push(idx(r, c));
+        r += dr; c += dc;
+      }
+      if (line.length >= 2) lines.push(line);
+    }
+  }
+  return lines;
+}
+const LINES = buildLines();
+
+function hLineCompletion(board, player) {
+  let score = 0;
+  for (const line of LINES) {
+    let run = 0;
+    for (const i of line) {
+      if (board[i] === player) run++;
+      else { score += run * run; run = 0; }
+    }
+    score += run * run;
+  }
+  return score;
+}
+
+const CENTER_IDX = idx(2, 2);
+function hCenterProximity(board, player) {
+  let score = 0;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (board[idx(r, c)] === player)
+        score += 1 - (Math.abs(r - 2) + Math.abs(c - 2)) / 4;
+  return score;
+}
+
+function hCornerProximity(board, player) {
+  const corners = [[0,0],[0,4],[4,0],[4,4]];
+  let score = 0;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (board[idx(r, c)] === player) {
+        const minD = Math.min(...corners.map(([cr,cc]) => Math.abs(r-cr)+Math.abs(c-cc)));
+        score += 1 - minD / (2 * Math.floor((SIZE - 1) / 2)); // max achievable minD is at the center
+      }
+  return score;
+}
+
+function hSidesProximity(board, player) {
+  const maxD = Math.floor((SIZE - 1) / 2);
+  let score = 0;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (board[idx(r, c)] === player) {
+        const d = Math.min(r, SIZE-1-r, c, SIZE-1-c);
+        score += (maxD - d) / maxD;
+      }
+  return score;
+}
+
+function hMobility(board, player) {
+  return legalMoves(board, player).length - legalMoves(board, player === 'X' ? 'O' : 'X').length;
+}
+
+function evaluateBoard(board, turn) {
+  const w = checkWinner(board, turn);
+  if (w === 'X') return 1000;
+  if (w === 'O') return -1000;
+
+  const hw = getHeuristicWeights();
+  const xCount = board.filter(c => c === 'X').length;
+  const oCount = board.filter(c => c === 'O').length;
+  let score = 0;
+  if (hw.material) score += hw.material * (xCount - oCount);
+  if (hw.line)     score += hw.line     * (hLineCompletion(board,'X') - hLineCompletion(board,'O'));
+  if (hw.center)   score += hw.center   * (hCenterProximity(board,'X') - hCenterProximity(board,'O'));
+  if (hw.corner)   score += hw.corner   * (hCornerProximity(board,'X') - hCornerProximity(board,'O'));
+  if (hw.sides)    score += hw.sides    * (hSidesProximity(board,'X') - hSidesProximity(board,'O'));
+  if (hw.mobility) score += hw.mobility * hMobility(board, 'X');
+  return score;
+}
+
+// ─── Game Object ──────────────────────────────────────────────────────────────
+
+const alqGame = {
+  moves(s)        { return legalMoves(s.board, s.turn); },
+  apply(s, m)     { return {board: applyMove(s.board, m, s.turn), turn: s.turn === 'X' ? 'O' : 'X'}; },
+  evaluate(s)     { return evaluateBoard(s.board, s.turn); },
+  isMaximizing(s) { return s.turn === 'X'; },
+  isTerminal(s)   { return checkWinner(s.board, s.turn) !== null; },
+  movesEqual(a, b){ return a.length === b.length && a.every((v, i) => v === b[i]); },
+  simulate(s) {
+    let cur = s;
+    for (let i = 0; i < 200; i++) {
+      const mvs = legalMoves(cur.board, cur.turn);
+      if (!mvs.length) break;
+      const w = checkWinner(cur.board, cur.turn);
+      if (w) break;
+      cur = alqGame.apply(cur, mvs[Math.floor(Math.random() * mvs.length)]);
+    }
+    const w = checkWinner(cur.board, cur.turn);
+    return w === 'O' ? 1 : w === 'X' ? 0 : 0.5;
+  },
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+const state = {
+  board: startBoard(),
+  turn: 'X',
+  gameOver: false,
+  selected: null,    // index of selected piece
+  validLandings: [], // legal landing squares for selected piece
+  aiArrowData: null,
+  moveCount: 0,
+};
+
+function getState() { return {board: state.board, turn: state.turn}; }
+
+// ─── Rendering ───────────────────────────────────────────────────────────────
+
+function ptXY(r, c) { return {x: PAD + c * CELL, y: PAD + r * CELL}; }
+
+function render() {
+  const svg = document.getElementById('board-svg');
+  svg.setAttribute('width', SVG_SIZE);
+  svg.setAttribute('height', SVG_SIZE);
+  svg.setAttribute('viewBox', `0 0 ${SVG_SIZE} ${SVG_SIZE}`);
+  svg.innerHTML = '';
+
+  // Board background
+  const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  bg.setAttribute('width', SVG_SIZE); bg.setAttribute('height', SVG_SIZE);
+  bg.setAttribute('fill', '#ffffff'); svg.appendChild(bg);
+
+  // Draw lines
+  const lineColor = '#94a3b8';
+  const drawLine = (r1,c1,r2,c2) => {
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    const a = ptXY(r1,c1), b = ptXY(r2,c2);
+    l.setAttribute('x1',a.x); l.setAttribute('y1',a.y);
+    l.setAttribute('x2',b.x); l.setAttribute('y2',b.y);
+    l.setAttribute('stroke', lineColor); l.setAttribute('stroke-width','2');
+    svg.appendChild(l);
+  };
+  // Horizontal & vertical
+  for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE-1; c++) drawLine(r,c,r,c+1);
+  for (let c = 0; c < SIZE; c++) for (let r = 0; r < SIZE-1; r++) drawLine(r,c,r+1,c);
+  // Diagonals: one per cell in alternating checkerboard pattern.
+  // Even-sum cells get \, odd-sum cells get /, so every even-sum point
+  // has all 4 diagonal connections and odd-sum points have none.
+  for (let r = 0; r < SIZE-1; r++) {
+    for (let c = 0; c < SIZE-1; c++) {
+      if ((r+c) % 2 === 0) drawLine(r,c,r+1,c+1);
+      else                  drawLine(r,c+1,r+1,c);
+    }
+  }
+
+  // Valid landing highlights
+  for (const li of state.validLandings) {
+    const {r, c} = pos(li);
+    const {x, y} = ptXY(r, c);
+    const hl = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    hl.setAttribute('cx', x); hl.setAttribute('cy', y);
+    hl.setAttribute('r', 20); hl.setAttribute('fill', 'rgba(37,99,235,0.15)');
+    hl.setAttribute('stroke', '#2563eb'); hl.setAttribute('stroke-width', '2');
+    svg.appendChild(hl);
+  }
+
+  // Pieces
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const i = idx(r, c);
+      const cell = state.board[i];
+      const {x, y} = ptXY(r, c);
+      const isSelected = state.selected === i;
+      const isValidLanding = state.validLandings.includes(i);
+
+      if (cell) {
+        const outer = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        outer.setAttribute('cx', x); outer.setAttribute('cy', y);
+        outer.setAttribute('r', isSelected ? 22 : 20);
+        outer.setAttribute('fill', cell === 'X' ? '#fff' : '#111');
+        outer.setAttribute('stroke', isSelected ? '#2563eb' : cell === 'X' ? '#333' : '#888');
+        outer.setAttribute('stroke-width', isSelected ? '3' : '1.5');
+        if (!state.gameOver && cell === state.turn && getPlayerType(state.turn) === 'human')
+          outer.classList.add('point');
+        outer.addEventListener('click', () => handlePieceClick(i));
+        svg.appendChild(outer);
+      } else if (isValidLanding) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+        dot.setAttribute('r', 20); dot.setAttribute('fill', 'transparent');
+        dot.classList.add('point');
+        dot.addEventListener('click', () => handleLandingClick(i));
+        svg.appendChild(dot);
+      }
+    }
+  }
+
+  // Arrows drawn on top of pieces
+  if (state.aiArrowData && showAIHints()) {
+    for (const {move, value, width} of state.aiArrowData) {
+      const {r: fr, c: fc} = pos(move[0]);
+      const {r: tr, c: tc} = pos(move[move.length - 1]);
+      const {x: x1, y: y1} = ptXY(fr, fc);
+      const {x: x2, y: y2} = ptXY(tr, tc);
+      drawArrow(svg, x1, y1, x2, y2, valueToColor(value), width);
+    }
+  }
+}
+
+function updateScorePanel() {
+  const panel = document.getElementById('score-panel');
+  if (!isMinimaxActive()) { panel.style.display='none'; return; }
+  panel.style.display = 'block';
+
+  const board = state.board, turn = state.turn;
+  const hw = getHeuristicWeights();
+  const xCount = board.filter(c=>c==='X').length;
+  const oCount = board.filter(c=>c==='O').length;
+  const w = checkWinner(board, turn);
+  const sections = [];
+
+  for (const [player, sign, name] of [['X', 1, 'White'], ['O', -1, 'Black']]) {
+    if (getPlayerType(player) !== 'minimax') continue;
+    const fmt = v => (sign * v).toFixed(2);
+    const lines = [];
+    if (w === 'X') lines.push('Game over: White wins!');
+    else if (w === 'O') lines.push('Game over: Black wins!');
+    if (hw.material) { const v = hw.material*(xCount-oCount); lines.push(`Material (×${hw.material}): ${fmt(v)} (White:${xCount} Black:${oCount})`); }
+    if (hw.line)     { const v = hw.line*(hLineCompletion(board,'X')-hLineCompletion(board,'O')); lines.push(`Line Completion (×${hw.line}): ${fmt(v)}`); }
+    if (hw.center)   { const v = hw.center*(hCenterProximity(board,'X')-hCenterProximity(board,'O')); lines.push(`Center Proximity (×${hw.center}): ${fmt(v)}`); }
+    if (hw.corner)   { const v = hw.corner*(hCornerProximity(board,'X')-hCornerProximity(board,'O')); lines.push(`Corner Proximity (×${hw.corner}): ${fmt(v)}`); }
+    if (hw.sides)    { const v = hw.sides*(hSidesProximity(board,'X')-hSidesProximity(board,'O')); lines.push(`Sides Proximity (×${hw.sides}): ${fmt(v)}`); }
+    if (hw.mobility) { const v = hw.mobility*hMobility(board,'X'); lines.push(`Mobility (×${hw.mobility}): ${fmt(v)}`); }
+    if (!lines.length) lines.push('No heuristics active');
+    else if (!w) {
+      const total = lines.reduce((acc, l) => { const m = l.match(/: ([-\d.]+)/); return acc+(m?parseFloat(m[1]):0); }, 0);
+      lines.push('─────────────', `Total: ${total.toFixed(2)}`);
+    }
+    lines.push(`<span style="color:var(--color-text-muted);font-size:0.78rem">positive = good for ${name}</span>`);
+    sections.push(`<b style="color:var(--color-text-muted);font-family:var(--font-family);font-size:0.82rem">${name}</b><br>`+lines.join('<br>'));
+  }
+  document.getElementById('score-breakdown').innerHTML = sections.join('<br><br>');
+}
+
+// ─── Interaction ─────────────────────────────────────────────────────────────
+
+function triggerNextPlayer() {
+  if (state.gameOver) return;
+  const type = getPlayerType(state.turn);
+  const name = state.turn === 'X' ? 'White' : 'Black';
+  const sb = document.getElementById('status-box');
+  if (type === 'human') {
+    sb.textContent = `${name}'s turn`;
+    return;
+  }
+  sb.textContent = `${name} thinking...`;
+  runAI(alqGame, getState(), ({move, arrowData}) => {
+    state.aiArrowData = arrowData;
+    if (move === null) return;
+    state.board = applyMove(state.board, move, state.turn);
+    state.turn = state.turn === 'X' ? 'O' : 'X';
+    state.selected = null; state.validLandings = [];
+    state.moveCount++;
+    const w = checkWinner(state.board, state.turn);
+    render(); updateScorePanel();
+    if (w) { endGame(w); return; }
+    if (state.moveCount >= MAX_MOVES) { endGame('draw'); return; }
+    triggerNextPlayer();
+  });
+}
+
+function handlePieceClick(i) {
+  if (state.gameOver || getPlayerType(state.turn) !== 'human') return;
+  if (state.board[i] !== state.turn) return;
+
+  state.aiArrowData = null;
+  const allMoves = legalMoves(state.board, state.turn);
+  const myMoves = allMoves.filter(m => m[0] === i);
+
+  if (!myMoves.length) {
+    // Forced to use another piece
+    state.selected = null; state.validLandings = [];
+    render(); return;
+  }
+
+  state.selected = i;
+  state.validLandings = [...new Set(myMoves.map(m => m[m.length - 1]))];
+  render();
+}
+
+function handleLandingClick(toIdx) {
+  if (state.selected === null) return;
+  const allMoves = legalMoves(state.board, state.turn);
+  // Find a move from selected to toIdx (pick first if multi-path)
+  const move = allMoves.find(m => m[0] === state.selected && m[m.length - 1] === toIdx);
+  if (!move) return;
+
+  state.board = applyMove(state.board, move, state.turn);
+  state.turn = state.turn === 'X' ? 'O' : 'X';
+  state.selected = null; state.validLandings = [];
+  state.moveCount++;
+  const w = checkWinner(state.board, state.turn);
+  render(); updateScorePanel();
+  if (w) { endGame(w); return; }
+  if (state.moveCount >= MAX_MOVES) { endGame('draw'); return; }
+  triggerNextPlayer();
+}
+
+function endGame(winner) {
+  state.gameOver = true;
+  document.getElementById('status-box').textContent =
+    winner === 'draw' ? `Draw! (${MAX_MOVES}-move limit reached)` :
+    winner === 'X' ? 'White wins!' : 'Black wins!';
+  render(); updateScorePanel();
+}
+
+function newGame() {
+  state.board = startBoard();
+  state.turn = 'X';
+  state.gameOver = false;
+  state.selected = null;
+  state.validLandings = [];
+  state.aiArrowData = null;
+  state.moveCount = 0;
+  render(); updateScorePanel();
+  document.getElementById('thinking').textContent = '';
+  triggerNextPlayer();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+const alqExtraSettings = `
+  <hr style="border-color:var(--color-border); margin:8px 0;">
+  <div style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:8px;">Heuristic Weights <span style="font-size:0.75rem;">(0 = off)</span></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's piece count minus the opponent's piece count, multiplied by this weight.">Material</span><input type="number" id="hw-material" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Scans all board lines and sums run² for each consecutive run of the player's pieces. A run of 2 = 4 pts, run of 3 = 9 pts. Longer runs score exponentially more.">Line Completion</span><input type="number" id="hw-line" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the Manhattan distance to the board centre and maxD is the maximum such distance. Centre = 1, furthest point = 0.">Center Proximity</span><input type="number" id="hw-center" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores 1 − d/maxD, where d is the minimum Manhattan distance to any corner and maxD is the board's max distance. On a corner = 1, furthest cell ≈ 0.">Corner Proximity</span><input type="number" id="hw-corner" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Each piece scores (maxD − d)/maxD, where d is the minimum distance to any board edge. Border pieces score 1, the centre scores 0.">Sides Proximity</span><input type="number" id="hw-sides" value="0" min="0" step="1"></div>
+  <div class="piece-weight-row"><span data-tooltip="Player's legal move count minus the opponent's legal move count. Higher means more options.">Mobility</span><input type="number" id="hw-mobility" value="0" min="0" step="1"></div>
+`;
+
+buildSidebar({
+  extraSettings: alqExtraSettings,
+  mmDepthMax: 6, mmDepthDefault: 4,
+  uctSimsMax: 3000, uctSimsDefault: 800,
+  p1Label: 'White',
+  p2Label: 'Black',
+  extraPanels: `<div class="panel"><h3>Rules</h3><div style="font-size:0.82rem;color:var(--color-text-muted);line-height:1.6;">
+    <b>Board:</b> 5×5 grid of points connected by lines (including diagonals at even-sum points).<br>
+    <b>Play:</b> Move a piece along any line to an adjacent empty point, or capture an opponent piece by jumping over it to the empty point beyond.<br>
+    <b>Captures:</b> Optional and single-jump only.<br>
+    <b>Win:</b> Eliminate all opponent pieces, or leave them with no legal moves.<br>
+    <b>Draw:</b> If ${MAX_MOVES} moves are played without a winner, the game is a draw.
+  </div></div>`,
+});
+
+setupSharedUI({
+  onAlgoChange: () => updateScorePanel(),
+  onNewGame: newGame,
+  onRender: render,
+  onPlayerChange: triggerNextPlayer,
+});
+
+newGame();
+</script>
+</body>
+</html>
